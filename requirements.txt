@@ -1,0 +1,7 @@
+Flask
+requests
+pdf2image
+Pillow
+pytz
+paho-mqtt
+werkzeug
