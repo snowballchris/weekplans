@@ -12,6 +12,18 @@ type Weekplan = {
   page2_url?: string
 }
 
+type CalendarEvent = {
+  summary: string
+  location?: string
+  start_datetime: string
+  start_date: string
+  start_time: string
+  weekday: string
+  is_all_day?: boolean
+  calendar_name?: string
+  calendar_color?: string
+}
+
 function useModePolling(intervalMs: number) {
   const [isDashboard, setIsDashboard] = useState(false)
   const [view, setView] = useState<'all' | 'plan1' | 'plan2'>('all')
@@ -186,8 +198,32 @@ function SingleUserTwoPage({ plans, view, isPortrait }: { plans: Weekplan[]; vie
   const plan = plans.find(p => p.key === planKey)
   if (!plan) return null
   const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString('en-GB', { hour12: false }) : '—'
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const res = await fetch(`/api/calendar/events_for/${planKey}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (!cancelled) setEvents(Array.isArray(data) ? data : [])
+      } catch (e) {
+        if (!cancelled) setError('Failed to load events')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    const id = window.setInterval(load, 60_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [planKey])
   return (
-    <div style={{ width: '100%', height: isPortrait ? 'calc(100vh - 10rem)' : 'calc(100vh - 8rem)', overflowY: isPortrait ? 'auto' : 'hidden', paddingRight: isPortrait ? '1rem' : undefined }}>
+    <div style={{ width: '100%', height: isPortrait ? 'calc(100vh - 10rem)' : 'calc(100vh - 8rem)', overflowY: isPortrait ? 'auto' : 'hidden', paddingRight: isPortrait ? '1rem' : undefined, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>
@@ -195,20 +231,73 @@ function SingleUserTwoPage({ plans, view, isPortrait }: { plans: Weekplan[]; vie
         </div>
         <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>Last updated: {lastUpdated}</div>
       </div>
-      <div style={{ display: 'flex', gap: '2rem', height: '100%', flexDirection: isPortrait ? 'column' : 'row' }}>
+      <div style={{ display: 'flex', gap: '2rem', flexDirection: isPortrait ? 'column' : 'row' }}>
         <div style={{ flex: 1 }}>
-          <div style={{ width: '100%', height: isPortrait ? '50vh' : '100%', backgroundColor: '#f0f0f0', border: '1px solid #dee2e6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <img src={plan.page1_url || plan.img_url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          <div style={{ width: '100%', aspectRatio: '1.414 / 1', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
+            <img src={plan.page1_url || plan.img_url} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ width: '100%', height: isPortrait ? '50vh' : '100%', backgroundColor: '#f0f0f0', border: '1px solid #dee2e6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <div style={{ width: '100%', aspectRatio: '1.414 / 1', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {(plan.page2_url || plan.img_url2) ? (
-              <img src={plan.page2_url || plan.img_url2} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              <img src={plan.page2_url || plan.img_url2} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
             ) : (
               <div style={{ color: '#6c757d' }}>No page 2</div>
             )}
           </div>
+        </div>
+      </div>
+      {/* Assigned calendar events at the bottom */}
+      <div style={{ marginTop: 10 }}>
+        <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Upcoming events</h3>
+        <div style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 8, maxHeight: isPortrait ? 300 : 220, overflowY: 'auto' }}>
+          {loading && (
+            <div style={{ padding: '0.75rem', color: '#6c757d' }}>Loading…</div>
+          )}
+          {!loading && error && (
+            <div style={{ padding: '0.75rem', color: '#dc3545' }}>{error}</div>
+          )}
+          {!loading && !error && events.length === 0 && (
+            <div style={{ padding: '0.75rem', color: '#6c757d' }}>No events in the next 2 weeks</div>
+          )}
+          {!loading && !error && events.length > 0 && (
+            <div>
+              {events.map((ev, idx) => {
+                const color = ev.calendar_color || '#3788d8'
+                const isToday = new Date(ev.start_datetime).toDateString() === new Date().toDateString()
+                const dateDisplay = isToday ? 'Today' : `${ev.weekday}, ${ev.start_date}`
+                const timeText = ev.is_all_day ? dateDisplay : `${dateDisplay} at ${ev.start_time}`
+                const locationShort = (ev.location || '').split(',')[0] || ''
+                return (
+                  <div key={idx} style={{ padding: '0.5rem 0.75rem', borderTop: idx === 0 ? undefined : '1px solid #eee', borderLeft: `4px solid ${color}`, background: isToday ? 'rgba(13,110,253,0.04)' : undefined }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 22, lineHeight: 1.0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {ev.summary}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, paddingLeft: 8 }}>
+                          <div style={{ fontSize: 12, color: '#6c757d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {timeText}
+                          </div>
+                          {locationShort && (
+                            <div style={{ fontSize: 12, color: '#6c757d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {locationShort}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {ev.calendar_name && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6c757d', marginLeft: 12 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 10, background: color }} />
+                          <span>{ev.calendar_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
