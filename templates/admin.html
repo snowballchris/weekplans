@@ -280,7 +280,17 @@
                         <label for="dashboard_duration" class="form-label">Dashboard Display Duration: <span id="durationDisplay">{{ config.get('dashboard_duration', 10) }}</span>s</label>
                         <input type="range" class="form-range" id="dashboard_duration" name="dashboard_duration" min="5" max="300" step="5" value="{{ config.get('dashboard_duration', 10) }}">
                     </div>
-                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the dashboard duration setting."><i class="fas fa-save me-1"></i>Set Duration</button>
+                    <div class="row">
+                      <div class="col-md-6">
+                        <label for="dashboard_language" class="form-label">Dashboard Language</label>
+                        <select class="form-select" id="dashboard_language" name="dashboard_language">
+                          {% set lang = config.get('dashboard_language', 'en-GB') %}
+                          <option value="en-GB" {% if lang == 'en-GB' %}selected{% endif %}>English (UK)</option>
+                          <option value="nb-NO" {% if lang == 'nb-NO' %}selected{% endif %}>Norwegian Bokmål</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3" data-bs-toggle="tooltip" title="Saves only the dashboard duration and language."><i class="fas fa-save me-1"></i>Save General Settings</button>
                 </form>
 
                 <hr><h6>Weekplan Details</h6>
