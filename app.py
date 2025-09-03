@@ -193,7 +193,8 @@ def load_config():
             {"key": "plan2", "name": "Weekplan 2", "icon": "2"}
         ],
         "calendar_urls": [],
-        "calendar_assignments": {}
+        "calendar_assignments": {},
+        "dashboard_language": "en-GB"
     }
 
 def save_config(config_data):
@@ -342,7 +343,11 @@ def mode():
     until = get_forced_dashboard_until()
     mode_active = until is not None and datetime.now() < until
     view = get_forced_dashboard_view("all") if mode_active else "all"
-    return jsonify({"dashboard": mode_active, "view": view})
+    return jsonify({
+        "dashboard": mode_active,
+        "view": view,
+        "language": config.get("dashboard_language", "en-GB")
+    })
 
 @app.route("/screensaver_image")
 def screensaver_image():
@@ -555,6 +560,10 @@ def admin():
             
         elif action == 'set_duration':
             config['dashboard_duration'] = int(request.form.get('dashboard_duration', 10))
+            # Also allow saving language in this general form
+            lang = request.form.get('dashboard_language')
+            if lang in ['en-GB', 'nb-NO']:
+                config['dashboard_language'] = lang
             save_config(config)
 
         elif action == 'set_weekplan_details':
