@@ -1,5 +1,5 @@
 {
-  "dashboard_duration": 10,
+  "dashboard_duration": 60,
   "screensaver_config": [
     {
       "filename": "vertical-shot-mesmerizing-lake-scenery-stavern-norway.jpg",
@@ -30,5 +30,30 @@
       "icon": "\ud83d\ude4b\ud83c\udffb\u200d\u2642\ufe0f",
       "display_page": 2
     }
-  ]
+  ],
+  "enable_spond": true,
+  "spond_email": "christian@nestande.no",
+  "spond_password": "G4cQDLXU.uDGxVC[3g9aP",
+  "spond_group_id": "51DF8C41F13E4901B57294B6C47F2449",
+  "calendar_urls": [
+    {
+      "name": "Emil",
+      "url": "https://calendar.google.com/calendar/ical/c_5bc1gb4bb0upf9u5u8ld87voek%40group.calendar.google.com/private-c4afe0a886fca775cdba9433f23b75dc/basic.ics",
+      "id": "a4bffd63-2722-40e7-a9a7-acda5599c67e"
+    },
+    {
+      "name": "Julie",
+      "url": "https://calendar.google.com/calendar/ical/c_77a0h1lrivkvtv10qmhduql78o%40group.calendar.google.com/private-ce73e0f9eba42d899f393282f5c26c55/basic.ics",
+      "color": "#c537d7",
+      "id": "4b150313-abdf-48d4-bc8a-0fc61931ce95"
+    }
+  ],
+  "calendar_assignments": {
+    "plan1": [
+      "4b150313-abdf-48d4-bc8a-0fc61931ce95"
+    ],
+    "plan2": [
+      "a4bffd63-2722-40e7-a9a7-acda5599c67e"
+    ]
+  }
 }

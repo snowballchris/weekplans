@@ -12,8 +12,11 @@ from pdf2image import convert_from_path
 from PIL import Image
 import time
 from urllib.parse import urlparse
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from werkzeug.utils import secure_filename
+from icalendar import Calendar
+import pytz
+import recurring_ical_events
 
 # Configure logging
 logging.basicConfig(
@@ -74,6 +77,99 @@ def get_system_stats():
         logger.error(f"Could not retrieve all system stats: {e}")
     return stats
 
+def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
+    """Fetch and parse iCal events from a URL, returning events for the next N days including recurring events.
+    Default N is 14 (2 weeks)."""
+    try:
+        logger.info(f"Fetching calendar from: {ical_url}")
+        
+        # Fetch the iCal data
+        response = requests.get(ical_url, timeout=10)
+        response.raise_for_status()
+        
+        logger.info(f"Calendar data fetched, size: {len(response.content)} bytes")
+        
+        # Get current date and window end
+        now = datetime.now()
+        window_end = now + timedelta(days=days_ahead)
+        
+        logger.info(f"Date range: {now.strftime('%Y-%m-%d %H:%M')} to {window_end.strftime('%Y-%m-%d %H:%M')}")
+        
+        # Parse the calendar first
+        cal = Calendar.from_ical(response.content)
+        
+        # Use recurring_ical_events to get all events (including recurring) within the date range
+        # The library expects dates, not datetimes for the between() method
+        start_date = now.date()
+        end_date = window_end.date()
+        
+        logger.info(f"Using date range for recurring events: {start_date} to {end_date}")
+        
+        events_in_range = recurring_ical_events.of(cal).between(start_date, end_date)
+        
+        logger.info(f"Found {len(events_in_range)} events in range")
+        
+        events = []
+        local_tz = pytz.timezone('Europe/Oslo')  # Adjust timezone as needed
+        
+        for i, event in enumerate(events_in_range):
+            try:
+                # Get event details
+                summary = str(event.get('summary', 'No Title'))
+                location = str(event.get('location', ''))
+                dtstart = event.get('dtstart')
+                
+                logger.debug(f"Processing event {i+1}: {summary}")
+                
+                if dtstart:
+                    # Handle different datetime formats
+                    if hasattr(dtstart.dt, 'astimezone'):
+                        # It's a datetime object with timezone
+                        event_start = dtstart.dt
+                        if event_start.tzinfo is None:
+                            event_start = event_start.replace(tzinfo=pytz.UTC)
+                        local_start = event_start.astimezone(local_tz)
+                    elif hasattr(dtstart.dt, 'year'):
+                        # It's a date object (all-day event), convert to datetime
+                        event_start = datetime.combine(dtstart.dt, datetime.min.time())
+                        event_start = event_start.replace(tzinfo=local_tz)
+                        local_start = event_start
+                    else:
+                        continue
+                    
+                    # Check if it's an all-day event
+                    is_all_day = not hasattr(dtstart.dt, 'hour') or (
+                        hasattr(dtstart.dt, 'hour') and dtstart.dt.hour == 0 and dtstart.dt.minute == 0
+                    )
+                    
+                    event_data = {
+                        'summary': summary,
+                        'location': location,
+                        'start_datetime': local_start.isoformat(),
+                        'start_date': local_start.strftime('%Y-%m-%d'),
+                        'start_time': 'All day' if is_all_day else local_start.strftime('%H:%M'),
+                        'weekday': local_start.strftime('%A'),
+                        'is_all_day': is_all_day
+                    }
+                    events.append(event_data)
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing event: {e}")
+                continue
+        
+        # Sort events by start time
+        events.sort(key=lambda x: x['start_datetime'])
+        
+        logger.info(f"Returning {len(events)} processed events")
+        for event in events[:3]:  # Log first 3 events for debugging
+            logger.info(f"Event: {event['summary']} at {event['start_date']} {event['start_time']}")
+        
+        return events
+        
+    except Exception as e:
+        logger.error(f"Error fetching calendar from {ical_url}: {e}")
+        return []
+
 # --- Configuration Management ---
 def load_config():
     """Load the main configuration from config.json."""
@@ -95,7 +191,9 @@ def load_config():
         "weekplans": [
             {"key": "plan1", "name": "Weekplan 1", "icon": "1"},
             {"key": "plan2", "name": "Weekplan 2", "icon": "2"}
-        ]
+        ],
+        "calendar_urls": [],
+        "calendar_assignments": {}
     }
 
 def save_config(config_data):
@@ -283,6 +381,73 @@ def api_weekplans():
         })
     return jsonify(result)
 
+@app.route("/api/calendar/events", methods=["GET"])
+def api_calendar_events():
+    """Return calendar events from all configured URLs for the next 2 weeks."""
+    all_events = []
+    calendar_urls = config.get("calendar_urls", [])
+    
+    logger.info(f"Processing {len(calendar_urls)} calendar URLs")
+    
+    for calendar_config in calendar_urls:
+        url = calendar_config.get('url', '')
+        name = calendar_config.get('name', 'Calendar')
+        color = calendar_config.get('color', '#3788d8')  # Default blue color
+        if url:
+            logger.info(f"Processing calendar: {name}")
+            # Admin panel should show next 2 weeks
+            events = fetch_calendar_events(url, days_ahead=14)
+            for event in events:
+                event['calendar_name'] = name
+                event['calendar_color'] = color
+            all_events.extend(events)
+    
+    # Sort all events by start time
+    all_events.sort(key=lambda x: x['start_datetime'])
+    
+    logger.info(f"Returning {len(all_events)} total events")
+    return jsonify(all_events)
+
+@app.route("/api/calendar/events_for/<plan_key>", methods=["GET"])
+def api_calendar_events_for(plan_key: str):
+    """Return calendar events assigned to a specific plan (user) for today + next 3 days."""
+    assignments_map = config.get("calendar_assignments", {}) or {}
+    assigned_ids = set(assignments_map.get(plan_key, []))
+    all_events: List[Dict] = []
+    if not assigned_ids:
+        return jsonify([])
+
+    calendars = config.get("calendar_urls", [])
+    for calendar in calendars:
+        cal_id = calendar.get('id')
+        if cal_id in assigned_ids:
+            url = calendar.get('url', '')
+            name = calendar.get('name', 'Calendar')
+            color = calendar.get('color', '#3788d8')
+            if not url:
+                continue
+            events = fetch_calendar_events(url, days_ahead=3)  # today + next 3 days
+            for event in events:
+                event['calendar_name'] = name
+                event['calendar_color'] = color
+            all_events.extend(events)
+
+    all_events.sort(key=lambda x: x['start_datetime'])
+    return jsonify(all_events)
+
+@app.route("/api/calendar/debug/<path:calendar_url>", methods=["GET"])
+def api_calendar_debug(calendar_url):
+    """Debug endpoint to test a specific calendar URL."""
+    import urllib.parse
+    decoded_url = urllib.parse.unquote(calendar_url)
+    logger.info(f"Debug testing calendar URL: {decoded_url}")
+    events = fetch_calendar_events(decoded_url)
+    return jsonify({
+        'url': decoded_url,
+        'event_count': len(events),
+        'events': events[:10]  # Return first 10 events for debugging
+    })
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
     """Renders the admin panel and handles all admin actions."""
@@ -406,6 +571,39 @@ def admin():
             config['mqtt_pass'] = request.form.get('mqtt_pass', '')
             save_config(config)
             
+        elif action == 'set_calendar_assignments':
+            # For each plan, read selected calendar IDs
+            assignments: Dict[str, List[str]] = {}
+            for plan in config.get('weekplans', []):
+                key = plan['key']
+                selected = request.form.getlist(f'assign_{key}')
+                assignments[key] = selected
+            config['calendar_assignments'] = assignments
+            save_config(config)
+
+        elif action == 'add_calendar':
+            calendar_name = request.form.get('calendar_name', '').strip()
+            calendar_url = request.form.get('calendar_url', '').strip()
+            calendar_color = request.form.get('calendar_color', '#3788d8').strip()  # Default blue color
+            if calendar_name and calendar_url:
+                if 'calendar_urls' not in config:
+                    config['calendar_urls'] = []
+                # Check if URL already exists
+                if not any(cal.get('url') == calendar_url for cal in config['calendar_urls']):
+                    config['calendar_urls'].append({
+                        'name': calendar_name,
+                        'url': calendar_url,
+                        'color': calendar_color,
+                        'id': str(uuid.uuid4())
+                    })
+                    save_config(config)
+                    
+        elif action == 'remove_calendar':
+            calendar_id = request.form.get('calendar_id')
+            if calendar_id:
+                config['calendar_urls'] = [cal for cal in config.get('calendar_urls', []) if cal.get('id') != calendar_id]
+                save_config(config)
+            
         elif action == 'set_brightness':
             brightness_pct = request.form.get('brightness', '75')
             brightness_val = float(brightness_pct) / 100.0
@@ -440,3 +638,4 @@ def admin():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
+
