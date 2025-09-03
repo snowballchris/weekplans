@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekplans - Admin Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body { background-color: #f8f9fa; }
+    .card { margin-top: -1px; }
+    .nav-tabs .nav-link.active { background-color: white; border-bottom-color: white; }
+    .thumbnail { max-width: 150px; max-height: 150px; margin: 5px; border: 1px solid #dee2e6; border-radius: 4px; }
+    .screensaver-item { text-align: center; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .pdf-preview { margin-top: 1rem; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; display: none; }
+    .pdf-preview canvas { max-width: 100%; height: auto; }
+    .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+    .status-on { background-color: #198754; }
+    .status-off { background-color: #dc3545; }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="mb-0">Admin Panel</h1>
+      <form id="showWeekplansForm" method="POST" action="{{ url_for('admin') }}" class="d-inline">
+          <input type="hidden" name="action" value="show_week_plan">
+          <input type="hidden" name="current_tab" id="showWeekplansTabInput" value="{{ current_tab }}">
+          <input type="hidden" name="view" id="showViewInput" value="all">
+          {% set p1 = (config.get('weekplans', [])|first) %}
+          {% set p2 = (config.get('weekplans', [])|last) %}
+          <div class="btn-group">
+            <button id="showWeekplansPrimary" type="submit" class="btn btn-success">
+              <i class="fas fa-calendar-week me-1"></i>Show Weekplans
+            </button>
+            <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+              <span class="visually-hidden">Toggle Dropdown</span>
+            </button>
+            <ul class="dropdown-menu">
+              <li><button class="dropdown-item view-option" data-view="all" type="submit" name="view" value="all">All</button></li>
+              <li><button class="dropdown-item view-option" data-view="plan1" type="submit" name="view" value="plan1">{{ p1.name if p1 else 'User 1' }}</button></li>
+              <li><button class="dropdown-item view-option" data-view="plan2" type="submit" name="view" value="plan2">{{ p2.name if p2 else 'User 2' }}</button></li>
+            </ul>
+          </div>
+      </form>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link {% if current_tab == 'ukeplan' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#ukeplan" type="button">Weekplans</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link {% if current_tab == 'screensaver' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#screensaver" type="button">Screensaver</button>
+      </li>
+       <li class="nav-item" role="presentation">
+        <button class="nav-link {% if current_tab == 'controls' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#controls" type="button">Controls</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link {% if current_tab == 'settings' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#settings" type="button">Settings</button>
+      </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="adminTabsContent">
+      <!-- Ukeplan Tab -->
+      <div class="tab-pane fade {% if current_tab == 'ukeplan' %}show active{% endif %}" id="ukeplan" role="tabpanel">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Upload New Weekplan</h5>
+            <form method="POST" action="{{ url_for('admin') }}" enctype="multipart/form-data">
+              <input type="hidden" name="action" value="upload_pdf">
+              <input type="hidden" name="current_tab" value="ukeplan">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label for="pdf_file" class="form-label">Select PDF file (pages 1 and 2 will be used)</label>
+                    <input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Select weekplan to update</label>
+                    <div class="btn-group" role="group">
+                      {% for plan in config.get('weekplans', []) %}
+                        <input type="radio" class="btn-check" name="target" id="{{ plan.key }}" value="{{ plan.key }}" {% if loop.first %}checked{% endif %}>
+                        <label class="btn btn-outline-primary" for="{{ plan.key }}">{{ plan.icon }} {{ plan.name }}</label>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i>Upload & Update</button>
+                </div>
+                <div class="col-md-6">
+                    <div id="pdfPreview" class="pdf-preview">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                          <button id="pdfPrev" type="button" class="btn btn-outline-secondary btn-sm" disabled>&larr; Prev</button>
+                          <button id="pdfNext" type="button" class="btn btn-outline-secondary btn-sm ms-2" disabled>Next &rarr;</button>
+                        </div>
+                        <div class="text-muted small">Page <span id="pdfPageNum">1</span> / <span id="pdfPageCount">1</span></div>
+                      </div>
+                      <canvas id="pdfCanvas"></canvas>
+                    </div>
+                </div>
+              </div>
+            </form>
+            <hr>
+            <h5 class="mt-4">Current Weekplans</h5>
+            <form method="POST" action="{{ url_for('admin') }}" class="mb-3">
+              <input type="hidden" name="action" value="set_display_pages"><input type="hidden" name="current_tab" value="ukeplan">
+              <div class="row">
+              {% for plan in config.get('weekplans', []) %}
+              <div class="col-md-6">
+                <div class="text-center">
+                  <h6>{{ plan.icon }} {{ plan.name }}</h6>
+                  <div class="d-flex gap-2 justify-content-center">
+                    <img src="{{ url_for('static', filename='images/' + plan.key + '-ukeplan.png') }}?v={{ last_updates.get(plan.key).timestamp() if last_updates.get(plan.key) else 0 }}" class="img-fluid border rounded mb-2" style="max-width:48%" alt="Current weekplan page 1 for {{ plan.name }}">
+                    <img src="{{ url_for('static', filename='images/' + plan.key + '-ukeplan-2.png') }}?v={{ last_updates.get(plan.key).timestamp() if last_updates.get(plan.key) else 0 }}" onerror="this.style.display='none'" class="img-fluid border rounded mb-2" style="max-width:48%" alt="Current weekplan page 2 for {{ plan.name }}">
+                  </div>
+                  <div class="d-flex justify-content-center gap-3 align-items-center mb-2">
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="display_page_{{ plan.key }}" id="disp1_{{ plan.key }}" value="1" {% if plan.display_page|default(1) == 1 %}checked{% endif %}>
+                      <label class="form-check-label" for="disp1_{{ plan.key }}">Show page 1 in All view</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="display_page_{{ plan.key }}" id="disp2_{{ plan.key }}" value="2" {% if plan.display_page|default(1) == 2 %}checked{% endif %}>
+                      <label class="form-check-label" for="disp2_{{ plan.key }}">Show page 2 in All view</label>
+                    </div>
+                  </div>
+                  <p class="text-muted small">Last updated: {{ last_updates.get(plan.key).strftime("%-d %B %Y, %H:%M") if last_updates.get(plan.key) else 'Never' }}</p>
+                </div>
+              </div>
+              {% endfor %}
+              </div>
+              <div class="text-center">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save Display Pages</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screensaver Tab -->
+      <div class="tab-pane fade {% if current_tab == 'screensaver' %}show active{% endif %}" id="screensaver" role="tabpanel">
+        <div class="card">
+          <div class="card-body">
+            <form method="POST" action="{{ url_for('admin') }}" enctype="multipart/form-data" class="mb-3">
+                <input type="hidden" name="action" value="upload_screensaver_file">
+                <input type="hidden" name="current_tab" value="screensaver">
+                <div class="row g-3 align-items-end">
+                    <div class="col">
+                        <label for="screensaver_file" class="form-label">Upload from computer</label>
+                        <input type="file" class="form-control" name="screensaver_file" id="screensaver_file" accept="image/*" required>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i>Upload File</button>
+                    </div>
+                </div>
+            </form>
+            <form method="POST" action="{{ url_for('admin') }}" class="mb-4">
+                <input type="hidden" name="action" value="upload_screensaver_url">
+                <input type="hidden" name="current_tab" value="screensaver">
+                <div class="row g-3 align-items-end">
+                    <div class="col">
+                        <label for="screensaver_url" class="form-label">Or upload from URL</label>
+                        <input type="url" class="form-control" name="screensaver_url" id="screensaver_url" placeholder="https://example.com/image.jpg" required>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-link me-1"></i>Upload from URL</button>
+                    </div>
+                </div>
+            </form>
+            <hr>
+            <h5 class="mt-4">Manage Screensavers</h5>
+            <form id="activationForm" method="POST" action="{{ url_for('admin') }}">
+                <input type="hidden" name="action" value="update_screensaver_activation">
+                <input type="hidden" name="current_tab" value="screensaver">
+            </form>
+            <div class="d-flex flex-wrap gap-3">
+              {% for item in config.get("screensaver_config", []) %}
+              <div class="screensaver-item">
+                  <img src="{{ url_for('static', filename='screensaver/' ~ item.filename) }}" class="thumbnail">
+                  <div class="mt-2 d-flex justify-content-around align-items-center">
+                      <div class="form-check">
+                          <input class="form-check-input" type="checkbox" name="active_images" value="{{ item.filename }}" id="active_{{ loop.index }}" {% if item.active %}checked{% endif %} form="activationForm">
+                          <label class="form-check-label" for="active_{{ loop.index }}">Active</label>
+                      </div>
+                      <form method="POST" action="{{ url_for('admin') }}" class="m-0" onsubmit="return confirm('Are you sure you want to delete this image?');">
+                         <input type="hidden" name="action" value="delete_screensaver">
+                         <input type="hidden" name="current_tab" value="screensaver">
+                         <input type="hidden" name="filename" value="{{ item.filename }}">
+                         <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></button>
+                      </form>
+                  </div>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary mt-3" form="activationForm"><i class="fas fa-save me-1"></i>Update Activation Status</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Controls Tab -->
+      <div class="tab-pane fade {% if current_tab == 'controls' %}show active{% endif %}" id="controls" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">System Controls & Status</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Commands</h6>
+                        <div class="mb-3">
+                            <p class="mb-1">Change Browser URL</p>
+                            <form method="POST" action="{{ url_for('admin') }}">
+                                <input type="hidden" name="action" value="browser_url">
+                                <input type="hidden" name="current_tab" value="controls">
+                                <div class="input-group">
+                                    <input type="url" class="form-control" name="url" placeholder="{{ mqtt_stats['pi/browser/current_url'] }}" required>
+                                    <button type="submit" class="btn btn-outline-primary"><i class="fas fa-external-link-alt"></i></button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="mb-3">
+                            <form method="POST" action="{{ url_for('admin') }}">
+                                <input type="hidden" name="action" value="set_brightness">
+                                <input type="hidden" name="current_tab" value="controls">
+                                <label for="brightness" class="form-label">Brightness: <span id="brightnessDisplay">{{ (mqtt_stats['pi/brightness/state']|float * 100)|round }}</span>%</label>
+                                <div class="d-flex align-items-center">
+                                    <input type="range" class="form-range me-3" id="brightness" name="brightness" min="0" max="100" value="{{ (mqtt_stats['pi/brightness/state']|float * 100)|round }}">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">Set</button>
+                                </div>
+                            </form>
+                        </div>
+                        <hr>
+                        <div class="mb-3">
+                            <p class="mb-1">Display Control</p>
+                            <form method="POST" action="{{ url_for('admin') }}" class="d-inline">
+                                <input type="hidden" name="action" value="display_on"><input type="hidden" name="current_tab" value="controls">
+                                <button type="submit" class="btn btn-outline-success">Turn ON</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin') }}" class="d-inline">
+                                <input type="hidden" name="action" value="display_off"><input type="hidden" name="current_tab" value="controls">
+                                <button type="submit" class="btn btn-outline-danger">Turn OFF</button>
+                            </form>
+                        </div>
+                        <div class="mb-3">
+                           <p class="mb-1">System</p>
+                            <form id="restartForm" method="POST" action="{{ url_for('admin') }}">
+                                <input type="hidden" name="action" value="system_restart"><input type="hidden" name="current_tab" value="controls">
+                                <button type="button" class="btn btn-outline-warning" onclick="confirmRestart()">Restart System</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                           <h6>Live Status</h6>
+                           <button id="refreshStatus" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                        <ul class="list-group" id="statusContent">
+                            <li class="list-group-item"><strong>Boot Time:</strong> <span id="boot_time">{{ system_stats.boot_time }}</span></li>
+                            <li class="list-group-item"><strong>CPU Load:</strong> <span id="cpu_load">{{ "%.1f"|format(system_stats.cpu_load|float) }}%</span></li>
+                            <li class="list-group-item"><strong>CPU Temp:</strong> <span id="cpu_temp">{{ "%.1f"|format(system_stats.cpu_temp|float) }}°C</span></li>
+                            <li class="list-group-item"><strong>Memory Usage:</strong> <span id="memory_usage">{{ "%.1f"|format(system_stats.memory_usage|float) }}%</span></li>
+                            <li class="list-group-item"><strong>Disk Free:</strong> <span id="disk_free_pct">{{ system_stats.disk_free_pct }}%</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="tab-pane fade {% if current_tab == 'settings' %}show active{% endif %}" id="settings" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Application Settings</h5>
+                
+                <hr><h6>General</h6>
+                <form method="POST" action="{{ url_for('admin') }}" class="mb-4">
+                    <input type="hidden" name="action" value="set_duration"><input type="hidden" name="current_tab" value="settings">
+                    <div class="mb-3">
+                        <label for="dashboard_duration" class="form-label">Dashboard Display Duration: <span id="durationDisplay">{{ config.get('dashboard_duration', 10) }}</span>s</label>
+                        <input type="range" class="form-range" id="dashboard_duration" name="dashboard_duration" min="5" max="300" step="5" value="{{ config.get('dashboard_duration', 10) }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the dashboard duration setting."><i class="fas fa-save me-1"></i>Set Duration</button>
+                </form>
+
+                <hr><h6>Weekplan Details</h6>
+                <form method="POST" action="{{ url_for('admin') }}" class="mb-4">
+                    <input type="hidden" name="action" value="set_weekplan_details"><input type="hidden" name="current_tab" value="settings">
+                    <div class="row">
+                        {% for plan in config.get('weekplans', []) %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">Weekplan {{ loop.index }}</h6>
+                                    <div class="row align-items-end">
+                                        <div class="col-3">
+                                            <label class="form-label">Icon <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Use an emoji or short text"></i></label>
+                                            <input type="text" class="form-control" name="icon_{{ plan.key }}" value="{{ plan.icon }}">
+                                        </div>
+                                        <div class="col-9">
+                                            <label class="form-label">Name</label>
+                                            <input type="text" class="form-control" name="name_{{ plan.key }}" value="{{ plan.name }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the weekplan names and icons."><i class="fas fa-save me-1"></i>Set Weekplan Details</button>
+                </form>
+
+                <hr><h6>MQTT Configuration</h6>
+                <form method="POST" action="{{ url_for('admin') }}">
+                    <input type="hidden" name="action" value="set_mqtt_config"><input type="hidden" name="current_tab" value="settings">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="enable_mqtt" id="enable_mqtt" {% if config.get('enable_mqtt') %}checked{% endif %}>
+                        <label class="form-check-label" for="enable_mqtt">Enable MQTT Integration</label>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-9 mb-3"><label for="mqtt_broker" class="form-label">MQTT Broker</label><input type="text" class="form-control" id="mqtt_broker" name="mqtt_broker" value="{{ config.get('mqtt_broker', 'homeassistant.local') }}"></div>
+                        <div class="col-md-3 mb-3"><label for="mqtt_port" class="form-label">Port</label><input type="number" class="form-control" id="mqtt_port" name="mqtt_port" value="{{ config.get('mqtt_port', 1883) }}"></div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label for="mqtt_user" class="form-label">Username (optional)</label><input type="text" class="form-control" id="mqtt_user" name="mqtt_user" value="{{ config.get('mqtt_user', '') }}"></div>
+                        <div class="col-md-6 mb-3"><label for="mqtt_pass" class="form-label">Password (optional)</label><input type="password" class="form-control" id="mqtt_pass" name="mqtt_pass" value="{{ config.get('mqtt_pass', '') }}"></div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the MQTT settings."><i class="fas fa-save me-1"></i>Set MQTT Configuration</button>
+                        <div class="ms-4 d-flex align-items-center">
+                           <div class="status-indicator {% if mqtt_connected %}status-on{% else %}status-off{% endif %}"></div>
+                           <span>Status: {% if mqtt_connected %}Connected{% else %}Not Connected{% endif %}</span>
+                       </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+  <script>
+    // This script ensures the "Show Weekplans" button knows which tab is currently active.
+    document.addEventListener('DOMContentLoaded', function() {
+      const tabButtons = document.querySelectorAll('button[data-bs-toggle="tab"]');
+      const showWeekplansTabInput = document.getElementById('showWeekplansTabInput');
+  
+      if (tabButtons.length > 0 && showWeekplansTabInput) {
+        tabButtons.forEach(button => {
+          button.addEventListener('shown.bs.tab', function (event) {
+            // Get the ID of the new tab from its 'data-bs-target' attribute (e.g., "#ukeplan")
+            const newTabId = event.target.getAttribute('data-bs-target').substring(1);
+            // Update the hidden input's value to the new tab's ID
+            showWeekplansTabInput.value = newTabId;
+          });
+        });
+      }
+    });
+  </script>
+  <script>
+    // Persist last selected view for the Show Weekplans primary button
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('showWeekplansForm');
+      const viewInput = document.getElementById('showViewInput');
+      const options = document.querySelectorAll('.view-option');
+      const STORAGE_KEY = 'weekplans:lastView';
+
+      // Load last view or default to 'all'
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) viewInput.value = saved;
+      } catch (e) {}
+
+      // When an option is clicked, update hidden input and persist
+      options.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          const v = this.getAttribute('data-view') || 'all';
+          viewInput.value = v;
+          try { localStorage.setItem(STORAGE_KEY, v); } catch (e) {}
+        });
+      });
+
+      // Also persist on primary submit (it uses whatever value is currently set)
+      if (form) {
+        form.addEventListener('submit', function() {
+          try { localStorage.setItem(STORAGE_KEY, viewInput.value || 'all'); } catch (e) {}
+        });
+      }
+    });
+  </script>
+</body>
+</html>
