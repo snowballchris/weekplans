@@ -240,6 +240,7 @@
                                 <input type="hidden" name="action" value="display_off"><input type="hidden" name="current_tab" value="controls">
                                 <button type="submit" class="btn btn-outline-danger">Turn OFF</button>
                             </form>
+                            <div class="mt-2 text-muted small">Current state: {{ mqtt_stats['pi/display/state']|default('unknown') }}</div>
                         </div>
                         <div class="mb-3">
                            <p class="mb-1">System</p>
@@ -247,6 +248,14 @@
                                 <input type="hidden" name="action" value="system_restart"><input type="hidden" name="current_tab" value="controls">
                                 <button type="button" class="btn btn-outline-warning" onclick="confirmRestart()">Restart System</button>
                             </form>
+                        </div>
+                        <div class="mb-3">
+                           <p class="mb-1">Browser</p>
+                           <form method="POST" action="{{ url_for('admin') }}" class="d-inline">
+                               <input type="hidden" name="action" value="browser_refresh"><input type="hidden" name="current_tab" value="controls">
+                               <button type="submit" class="btn btn-outline-secondary">Refresh Browser</button>
+                           </form>
+                           <div class="mt-2 text-muted small">Current URL: {{ mqtt_stats['pi/browser/current_url']|default('') }}</div>
                         </div>
                     </div>
                     <div class="col-md-6">

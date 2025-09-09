@@ -9,8 +9,6 @@ import logging
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from pdf2image import convert_from_path
-from PIL import Image
-import time
 from urllib.parse import urlparse
 from typing import Optional, Dict, List
 from werkzeug.utils import secure_filename
@@ -272,7 +270,61 @@ mqtt_client = None
 if config.get("enable_mqtt"):
     try:
         import paho.mqtt.client as mqtt
+        import socket
         logger.info("MQTT is enabled.")
+        # Initialize MQTT client
+        client_id = f"weekplans-{socket.gethostname()}-{uuid.uuid4().hex[:6]}"
+        try:
+            # Try paho-mqtt v2 style constructor first
+            from paho.mqtt.client import Client, CallbackAPIVersion
+            mqtt_client = Client(CallbackAPIVersion.VERSION1, client_id=client_id)
+        except Exception:
+            # Fallback to v1 style
+            mqtt_client = mqtt.Client(client_id=client_id)
+
+        # Set credentials if provided
+        if config.get("mqtt_user"):
+            mqtt_client.username_pw_set(config.get("mqtt_user", ""), config.get("mqtt_pass", ""))
+
+        # Local state holder for connection
+        _mqtt_connected_flag = {"val": False}
+
+        def _on_connect(client, userdata, flags, rc):
+            try:
+                logger.info(f"Connected to MQTT broker with result code {rc}")
+                _mqtt_connected_flag["val"] = True
+                # Subscribe to state topics (read-only)
+                client.subscribe("pi/display/state")
+                client.subscribe("pi/browser/current_url")
+                client.subscribe("pi/brightness/state")
+            except Exception as e:
+                logger.error(f"Error in MQTT on_connect: {e}")
+
+        def _on_disconnect(client, userdata, rc):
+            _mqtt_connected_flag["val"] = False
+            logger.warning(f"Disconnected from MQTT broker (rc={rc})")
+
+        def _on_message(client, userdata, msg):
+            try:
+                payload = msg.payload.decode(errors="ignore") if isinstance(msg.payload, (bytes, bytearray)) else str(msg.payload)
+                topic = msg.topic
+                # Update in-memory state to reflect current values
+                if topic in ["pi/display/state", "pi/browser/current_url", "pi/brightness/state"]:
+                    mqtt_stats[topic] = payload
+                    logger.debug(f"MQTT state updated: {topic} = {payload}")
+            except Exception as e:
+                logger.error(f"Error processing MQTT message: {e}")
+
+        mqtt_client.on_connect = _on_connect
+        mqtt_client.on_disconnect = _on_disconnect
+        mqtt_client.on_message = _on_message
+
+        # Connect and start background loop
+        try:
+            mqtt_client.connect(config.get("mqtt_broker", "localhost"), int(config.get("mqtt_port", 1883)))
+            mqtt_client.loop_start()
+        except Exception as e:
+            logger.error(f"Failed to connect to MQTT broker: {e}")
     except ImportError:
         logger.warning("paho-mqtt library not found. MQTT is disabled.")
         config["enable_mqtt"] = False
@@ -280,7 +332,8 @@ if config.get("enable_mqtt"):
 # Mock MQTT stats for demonstration if MQTT is disabled
 mqtt_stats = {
     "pi/browser/current_url": "http://example.com",
-    "pi/brightness/state": "0.75"
+    "pi/brightness/state": "0.75",
+    "pi/display/state": "off"
 }
 
 # --- Routes ---
@@ -617,18 +670,51 @@ def admin():
             brightness_pct = request.form.get('brightness', '75')
             brightness_val = float(brightness_pct) / 100.0
             logger.info(f"COMMAND: Set Brightness to {brightness_val}")
-            mqtt_stats['pi/brightness/state'] = str(brightness_val)
+            # Publish command if MQTT is available; do not mutate state directly
+            try:
+                if mqtt_client is not None and mqtt_client.is_connected():
+                    mqtt_client.publish('pi/brightness/command', str(brightness_val), qos=0, retain=False)
+                else:
+                    logger.warning("MQTT not connected; brightness command not published")
+            except Exception as e:
+                logger.error(f"Error publishing brightness command: {e}")
         
         elif action == 'browser_url':
             url = request.form.get('url')
             if url:
                 logger.info(f"COMMAND: Change URL to {url}")
-                mqtt_stats['pi/browser/current_url'] = url
+                try:
+                    if mqtt_client is not None and mqtt_client.is_connected():
+                        mqtt_client.publish('pi/browser/command/url', url, qos=0, retain=False)
+                    else:
+                        logger.warning("MQTT not connected; browser URL command not published")
+                except Exception as e:
+                    logger.error(f"Error publishing browser URL command: {e}")
+
+        elif action == 'browser_refresh':
+            logger.info("COMMAND: Refresh Browser")
+            try:
+                if mqtt_client is not None and mqtt_client.is_connected():
+                    mqtt_client.publish('pi/browser/command/refresh', '1', qos=0, retain=False)
+                else:
+                    logger.warning("MQTT not connected; browser refresh command not published")
+            except Exception as e:
+                logger.error(f"Error publishing browser refresh command: {e}")
 
         elif action in ['display_on', 'display_off', 'system_restart']:
             logger.info(f"Received command: {action}")
-            if action == 'system_restart':
-                 logger.warning("System restart command received but not executed.")
+            try:
+                if mqtt_client is None or not mqtt_client.is_connected():
+                    logger.warning("MQTT not connected; command not published")
+                else:
+                    if action == 'display_on':
+                        mqtt_client.publish('pi/display/command', 'on', qos=0, retain=False)
+                    elif action == 'display_off':
+                        mqtt_client.publish('pi/display/command', 'off', qos=0, retain=False)
+                    elif action == 'system_restart':
+                        mqtt_client.publish('pi/system/command/restart', '1', qos=0, retain=False)
+            except Exception as e:
+                logger.error(f"Error publishing command for {action}: {e}")
 
         return redirect(url_for('admin', tab=current_tab))
 
