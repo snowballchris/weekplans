@@ -106,7 +106,7 @@ function App() {
   }, [isDashboard, screensaverUrl])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'black' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: isDashboard ? 'transparent' : 'black' }}>
       {!isDashboard && (
         <div style={{ position: 'absolute', inset: 0 }}>
           {screensaverUrl && (
@@ -235,7 +235,7 @@ function SingleUserTwoPage({ plans, view, isPortrait, language }: { plans: Weekp
         </div>
         <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>{lastUpdatedLabel} {lastUpdated}</div>
       </div>
-      <div style={{ display: 'flex', gap: '2rem', flexDirection: isPortrait ? 'column' : 'row' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', flexDirection: isPortrait ? 'column' : 'row' }}>
         <div style={{ flex: 1 }}>
           <div style={{ width: '100%', aspectRatio: '1.414 / 1', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: 8, overflow: 'hidden' }}>
             <img src={plan.page1_url || plan.img_url} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />

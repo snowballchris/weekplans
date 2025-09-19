@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
                           <span class="plan-icon">${selected.icon || ''}</span>
                           <h2 class="plan-title">${selected.name || ''}</h2>
                         </div>
-                        <div class="d-flex gap-3" style="height: calc(100vh - 12rem);">
+                        <div class="d-flex" style="height: calc(100vh - 12rem); gap: 0.5rem;">
                           <div class="image-frame" style="flex:1">
                             <img src="${selected.img_page1_url || selected.img_url}" class="plan-image" />
                           </div>
