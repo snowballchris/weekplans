@@ -265,6 +265,9 @@ def get_forced_dashboard_view(default_view: str = "all") -> str:
 
 app = Flask(__name__)
 
+# Configure Flask for large file uploads (50MB max)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
 # --- MQTT Setup (optional) ---
 mqtt_client = None
 if config.get("enable_mqtt"):
@@ -289,6 +292,64 @@ if config.get("enable_mqtt"):
         # Local state holder for connection
         _mqtt_connected_flag = {"val": False}
 
+        def _publish_ha_discovery(client):
+            """Publish Home Assistant MQTT Discovery messages for weekplan buttons."""
+            try:
+                import socket
+                device_name = f"Weekplans {socket.gethostname()}"
+                device_id = f"weekplans_{socket.gethostname()}".replace("-", "_")
+                
+                # Device info
+                device_info = {
+                    "identifiers": [device_id],
+                    "name": device_name,
+                    "manufacturer": "Weekplans App",
+                    "model": "Weekplans Dashboard",
+                    "sw_version": "1.0"
+                }
+                
+                # Button configurations for each weekplan view
+                buttons = [
+                    {
+                        "name": "Show All Weekplans",
+                        "command_topic": "pi/weekplan/command",
+                        "payload_press": "all",
+                        "unique_id": f"{device_id}_show_all"
+                    },
+                    {
+                        "name": "Show Julie's Weekplan",
+                        "command_topic": "pi/weekplan/command", 
+                        "payload_press": "plan1",
+                        "unique_id": f"{device_id}_show_plan1"
+                    },
+                    {
+                        "name": "Show Emil's Weekplan",
+                        "command_topic": "pi/weekplan/command",
+                        "payload_press": "plan2", 
+                        "unique_id": f"{device_id}_show_plan2"
+                    }
+                ]
+                
+                # Publish discovery messages for each button
+                for button in buttons:
+                    discovery_topic = f"homeassistant/button/{button['unique_id']}/config"
+                    discovery_payload = {
+                        "name": button["name"],
+                        "command_topic": button["command_topic"],
+                        "payload_press": button["payload_press"],
+                        "unique_id": button["unique_id"],
+                        "device": device_info,
+                        "icon": "mdi:calendar-week"
+                    }
+                    
+                    client.publish(discovery_topic, json.dumps(discovery_payload), qos=1, retain=True)
+                    logger.info(f"Published HA discovery for button: {button['name']}")
+                
+                logger.info("Home Assistant MQTT Discovery messages published successfully")
+                
+            except Exception as e:
+                logger.error(f"Error publishing HA discovery messages: {e}")
+
         def _on_connect(client, userdata, flags, rc):
             try:
                 logger.info(f"Connected to MQTT broker with result code {rc}")
@@ -297,6 +358,11 @@ if config.get("enable_mqtt"):
                 client.subscribe("pi/display/state")
                 client.subscribe("pi/browser/current_url")
                 client.subscribe("pi/brightness/state")
+                # Subscribe to weekplan command topics
+                client.subscribe("pi/weekplan/command")
+                
+                # Publish Home Assistant MQTT Discovery messages
+                _publish_ha_discovery(client)
             except Exception as e:
                 logger.error(f"Error in MQTT on_connect: {e}")
 
@@ -312,6 +378,15 @@ if config.get("enable_mqtt"):
                 if topic in ["pi/display/state", "pi/browser/current_url", "pi/brightness/state"]:
                     mqtt_stats[topic] = payload
                     logger.debug(f"MQTT state updated: {topic} = {payload}")
+                # Handle weekplan commands
+                elif topic == "pi/weekplan/command":
+                    logger.info(f"Received weekplan command: {payload}")
+                    duration = config.get("dashboard_duration", 10)
+                    view = payload.strip().lower()
+                    if view not in ['all', 'plan1', 'plan2']:
+                        view = 'all'
+                    set_forced_dashboard_until(datetime.now() + timedelta(seconds=duration), view=view)
+                    logger.info(f"Set dashboard mode: {view} for {duration} seconds")
             except Exception as e:
                 logger.error(f"Error processing MQTT message: {e}")
 
