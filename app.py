@@ -78,11 +78,14 @@ def get_system_stats():
 def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
     """Fetch and parse iCal events from a URL, returning events for the next N days including recurring events.
     Default N is 14 (2 weeks)."""
+    # Normalize webcal:// URLs to https:// (webcal is just a protocol hint, not a real protocol)
+    normalized_url = ical_url.replace('webcal://', 'https://', 1) if ical_url.startswith('webcal://') else ical_url
+    
     try:
-        logger.info(f"Fetching calendar from: {ical_url}")
+        logger.info(f"Fetching calendar from: {normalized_url}")
         
         # Fetch the iCal data
-        response = requests.get(ical_url, timeout=10)
+        response = requests.get(normalized_url, timeout=10)
         response.raise_for_status()
         
         logger.info(f"Calendar data fetched, size: {len(response.content)} bytes")
@@ -165,7 +168,7 @@ def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
         return events
         
     except Exception as e:
-        logger.error(f"Error fetching calendar from {ical_url}: {e}")
+        logger.error(f"Error fetching calendar from {ical_url} (normalized to {normalized_url}): {e}")
         return []
 
 # --- Configuration Management ---
