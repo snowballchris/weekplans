@@ -18,18 +18,29 @@ A Flask-based web application designed to display and manage weekly schedules in
 
 WeekPlans is designed to run as a single Docker container that serves the frontend (Nginx) and API (Gunicorn).
 
-1. Clone the repository:
+1. Pull the prebuilt image:
+   ```bash
+   docker pull ghcr.io/snowballchris/weekplans:latest
+   ```
+
+2. Run the container:
+   ```bash
+   mkdir -p data/static data/uploads
+   cp config.json data/config.json
+
+   docker run --rm -p 8080:80 \
+     -v "$(pwd)/data:/data" \
+     ghcr.io/snowballchris/weekplans:latest
+   ```
+
+3. Build locally (optional):
    ```bash
    git clone https://github.com/snowballchris/weekplans.git
    cd weekplans
-   ```
-
-2. Build the image:
-   ```bash
    docker build -t weekplans .
    ```
 
-3. Run the container:
+4. Run the locally built image:
    ```bash
    mkdir -p data/static data/uploads
    cp config.json data/config.json
