@@ -13,12 +13,22 @@ WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    nginx \
+    ca-certificates \
+    curl \
+    gnupg \
     poppler-utils \
+  && curl -fsSL https://nginx.org/keys/nginx_signing.key \
+    | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] https://nginx.org/packages/debian/ bookworm nginx" \
+    > /etc/apt/sources.list.d/nginx.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    nginx \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+  && python -m pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 COPY --from=frontend-build /build/frontend/dist /app/frontend/dist
