@@ -14,13 +14,9 @@ A Flask-based web application designed to display and manage weekly schedules in
 - 🔆 Brightness control (via MQTT)
 - 🎯 URL control for browser integration
 
-## Prerequisites
+## Docker
 
-- Python 3.x
-- poppler-utils (for PDF conversion)
-- Node.js and npm (for frontend development)
-
-## Installation
+WeekPlans is designed to run as a single Docker container that serves the frontend (Nginx) and API (Gunicorn).
 
 1. Clone the repository:
    ```bash
@@ -28,22 +24,27 @@ A Flask-based web application designed to display and manage weekly schedules in
    cd weekplans
    ```
 
-2. Create and activate a virtual environment:
+2. Build the image:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   docker build -t weekplans .
    ```
 
-3. Install Python dependencies:
+3. Run the container:
    ```bash
-   pip install -r requirements.txt
+   docker run --rm -p 8080:80 \
+     -v "$(pwd)/config.json:/app/config.json" \
+     -v "$(pwd)/static:/app/static" \
+     -v "$(pwd)/uploads:/app/uploads" \
+     weekplans
    ```
 
-4. Install frontend dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
+Then open:
+- `http://localhost:8080/` (dashboard)
+- `http://localhost:8080/admin` (admin)
+
+Notes:
+- `poppler-utils` is included in the image for PDF conversion.
+- The volume mounts keep settings and uploads between restarts.
 
 ## Configuration
 
@@ -74,145 +75,9 @@ Example configuration:
 
 ## Usage
 
-1. Start the Flask backend:
-   ```bash
-   python app.py
-   ```
-   The server will start on `http://localhost:5001`
-
-2. Access the dashboard:
-   - Main dashboard: `http://localhost:5001/`
-   - Admin panel: `http://localhost:5001/admin`
-
-## Raspberry Pi – One‑command install (recommended)
-
-For a simple, reliable two‑process setup (Flask API via Gunicorn, frontend via Nginx), run this on a fresh Raspberry Pi OS:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/snowballchris/weekplans/main/scripts/install.sh | sudo bash
-```
-
-After it finishes:
-- Open: `http://<pi-ip>/`
-- API health: `http://<pi-ip>/mode`
-
-To update later:
-```bash
-curl -fsSL https://raw.githubusercontent.com/snowballchris/weekplans/main/scripts/update.sh | sudo bash
-```
-
-### What the installer does
-- Installs system packages: Python, venv, pip, poppler-utils, Nginx, Node.js, npm, git
-- Clones/updates this repo into `/opt/weekplans`
-- Creates a Python venv and installs backend deps + Gunicorn
-- Builds the React frontend (`frontend/dist`)
-- Sets up a systemd service `weekplans` (Gunicorn on 127.0.0.1:5001)
-- Configures Nginx to serve the frontend and proxy API routes to 5001
-- Enables services to start on boot
-
-### Scripts (for reference)
-
-`scripts/install.sh` (used by the one‑liner)
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-APP_DIR=/opt/weekplans
-REPO_URL=${REPO_URL:-https://github.com/snowballchris/weekplans.git}
-BRANCH=${BRANCH:-main}
-API_BIND=127.0.0.1:5001
-SYSTEM_USER=${SYSTEM_USER:-pi}
-SYSTEM_GROUP=${SYSTEM_GROUP:-pi}
-
-apt update
-apt install -y python3 python3-venv python3-pip poppler-utils nginx nodejs npm git
-
-mkdir -p "$APP_DIR"
-if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" fetch --all
-  git -C "$APP_DIR" checkout "$BRANCH"
-  git -C "$APP_DIR" pull --ff-only
-else
-  git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
-fi
-
-cd "$APP_DIR"
-python3 -m venv venv
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt gunicorn
-
-cd "$APP_DIR/frontend"
-npm ci
-npm run build
-
-cat >/etc/systemd/system/weekplans.service <<EOF
-[Unit]
-Description=Weekplans Flask API
-After=network-online.target
-Wants=network-online.target
-[Service]
-WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/venv/bin/gunicorn -w 2 -b $API_BIND app:app
-Environment=PYTHONUNBUFFERED=1
-Restart=always
-User=$SYSTEM_USER
-Group=$SYSTEM_GROUP
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now weekplans
-
-cat >/etc/nginx/sites-available/weekplans <<EOF
-server {
-  listen 80;
-  server_name _;
-  root $APP_DIR/frontend/dist;
-  index index.html;
-  location ~ ^/(api|mode|screensaver_image|admin) {
-    proxy_pass http://$API_BIND;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-  }
-  location / {
-    try_files $uri /index.html;
-  }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/weekplans /etc/nginx/sites-enabled/weekplans
-nginx -t
-systemctl reload nginx
-
-echo "Done. Open: http://<pi-ip>/"
-```
-
-`scripts/update.sh`
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-APP_DIR=/opt/weekplans
-cd "$APP_DIR"
-if [ -d .git ]; then git pull --ff-only; fi
-./venv/bin/pip install -r requirements.txt
-cd frontend && npm ci && npm run build
-systemctl restart weekplans
-systemctl reload nginx
-echo "Updated."
-```
-
-### Configuration on Pi
-- Edit `/opt/weekplans/config.json` to adjust settings (names/icons, MQTT, duration).
-- Restart API after edits:
-```bash
-sudo systemctl restart weekplans
-```
-
-### Troubleshooting
-- API logs: `sudo journalctl -u weekplans -f`
-- Nginx test/reload: `sudo nginx -t && sudo systemctl reload nginx`
-- Health: `curl http://localhost/mode` should return JSON 200
+The Docker container serves the dashboard and admin interface:
+- Main dashboard: `http://localhost:8080/`
+- Admin panel: `http://localhost:8080/admin`
 
 ## Features in Detail
 
@@ -243,7 +108,7 @@ sudo systemctl restart weekplans
 ## Directory Structure
 
 ```
-weekplans2/
+weekplans/
 ├── app.py              # Main Flask application
 ├── config.json         # Configuration file
 ├── requirements.txt    # Python dependencies

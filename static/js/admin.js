@@ -10,6 +10,27 @@ document.addEventListener('DOMContentLoaded', function() {
         window.history.replaceState({}, '', url);
       });
     });
+
+    // --- Jump to tab buttons ---
+    const goToTabButtons = document.querySelectorAll('[data-go-to-tab]');
+    goToTabButtons.forEach(button => {
+      button.addEventListener('click', function() {
+        const target = this.getAttribute('data-go-to-tab');
+        const tabTrigger = document.querySelector(`[data-bs-target="#${target}"]`);
+        if (tabTrigger) {
+          const tab = new bootstrap.Tab(tabTrigger);
+          tab.show();
+          if (target === 'settings') {
+            setTimeout(() => {
+              const anchor = document.getElementById('mqtt-config');
+              if (anchor) {
+                anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            }, 150);
+          }
+        }
+      });
+    });
     
     // --- Initialize Bootstrap Tooltips ---
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -153,12 +174,12 @@ document.addEventListener('DOMContentLoaded', function() {
           })
           .then(data => {
               if(data.system_stats) {
-                  // BUG FIX: Overwrite entire textContent to prevent appending units
-                  document.getElementById('boot_time').textContent = data.system_stats.boot_time;
-                  document.getElementById('cpu_load').textContent = parseFloat(data.system_stats.cpu_load).toFixed(1) + '%';
-                  document.getElementById('cpu_temp').textContent = parseFloat(data.system_stats.cpu_temp).toFixed(1) + '°C';
-                  document.getElementById('memory_usage').textContent = parseFloat(data.system_stats.memory_usage).toFixed(1) + '%';
-                  document.getElementById('disk_free_pct').textContent = data.system_stats.disk_free_pct + '%';
+                  // Overwrite entire textContent to prevent appending units
+                  document.getElementById('uptime').textContent = data.system_stats.uptime;
+                  document.getElementById('start_time').textContent = data.system_stats.start_time;
+                  document.getElementById('memory_usage').textContent = data.system_stats.memory_usage;
+                  document.getElementById('memory_limit').textContent = data.system_stats.memory_limit;
+                  document.getElementById('container_id').textContent = data.system_stats.container_id;
               }
           })
           .catch(error => console.error('Error refreshing status:', error))

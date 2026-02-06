@@ -1,4 +1,5 @@
 import os
+import errno
 import locale
 import json
 import random
@@ -56,23 +57,64 @@ def allowed_file(filename, allowed_extensions):
            filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 def get_system_stats():
-    """Get current system statistics for the Controls tab."""
+    """Get container-friendly system statistics for the Controls tab."""
     stats = {
-        "boot_time": "Unknown",
-        "cpu_load": "0",
-        "cpu_temp": "0",
-        "memory_usage": "0",
-        "disk_free_pct": "0"
+        "uptime": "Unknown",
+        "start_time": "Unknown",
+        "memory_usage": "Unknown",
+        "memory_limit": "Unknown",
+        "container_id": "Unknown"
     }
+
+    def read_first_line(path: str) -> Optional[str]:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                return handle.readline().strip()
+        except Exception:
+            return None
+
+    def format_bytes(value_bytes: int) -> str:
+        if value_bytes < 1024:
+            return f"{value_bytes} B"
+        if value_bytes < 1024 ** 2:
+            return f"{value_bytes / 1024:.1f} KB"
+        if value_bytes < 1024 ** 3:
+            return f"{value_bytes / (1024 ** 2):.1f} MB"
+        return f"{value_bytes / (1024 ** 3):.1f} GB"
+
     try:
-        stats["boot_time"] = subprocess.check_output("uptime -s", shell=True).decode().strip()
-        stats["cpu_load"] = subprocess.check_output("top -bn1 | grep 'Cpu(s)' | awk '{print $2+$4}'", shell=True).decode().strip()
-        stats["cpu_temp"] = subprocess.check_output("vcgencmd measure_temp | egrep -o '[0-9]*\\.[0-9]*'", shell=True).decode().strip()
-        stats["memory_usage"] = subprocess.check_output("free | grep Mem | awk '{print $3/$2 * 100.0}'", shell=True).decode().strip()
-        disk_used_pct = subprocess.check_output("df -h / | awk 'NR==2 {print $5}'", shell=True).decode().strip().replace('%', '')
-        stats["disk_free_pct"] = str(100 - int(disk_used_pct))
+        uptime_line = read_first_line("/proc/uptime")
+        if uptime_line:
+            uptime_seconds = int(float(uptime_line.split()[0]))
+            delta = timedelta(seconds=uptime_seconds)
+            stats["uptime"] = str(delta)
+            stats["start_time"] = (datetime.now() - delta).strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            with open("/proc/self/status", "r", encoding="utf-8") as handle:
+                status_content = handle.read()
+        except Exception:
+            status_content = ""
+        for line in status_content.splitlines():
+            if line.startswith("VmRSS:"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    stats["memory_usage"] = format_bytes(int(parts[1]) * 1024)
+                break
+
+        memory_max = read_first_line("/sys/fs/cgroup/memory.max")
+        if memory_max:
+            if memory_max == "max":
+                stats["memory_limit"] = "Unlimited"
+            elif memory_max.isdigit():
+                stats["memory_limit"] = format_bytes(int(memory_max))
+
+        container_id = read_first_line("/etc/hostname")
+        if container_id:
+            stats["container_id"] = container_id
     except Exception as e:
         logger.error(f"Could not retrieve all system stats: {e}")
+
     return stats
 
 def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
@@ -176,7 +218,7 @@ def load_config():
     """Load the main configuration from config.json."""
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r') as f:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             logger.error(f"Error loading config file: {e}")
@@ -200,11 +242,27 @@ def load_config():
 
 def save_config(config_data):
     """Save the configuration to config.json."""
+    tmp_path = f"{CONFIG_FILE}.tmp"
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=2)
-    except IOError as e:
-        logger.error(f"Error saving config file: {e}")
+        os.replace(tmp_path, CONFIG_FILE)
+    except OSError as e:
+        if e.errno in (errno.EBUSY, errno.EXDEV):
+            try:
+                with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2)
+                logger.warning("Atomic config replace failed; wrote directly to config.json.")
+            except OSError as inner:
+                logger.error(f"Error saving config file: {inner}")
+        else:
+            logger.error(f"Error saving config file: {e}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
 
 # Load initial configuration
 config = load_config()
@@ -270,6 +328,14 @@ app = Flask(__name__)
 
 # Configure Flask for large file uploads (50MB max)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
+@app.before_request
+def refresh_config():
+    """Reload config per request to avoid stale worker state."""
+    global config
+    if request.endpoint == 'static':
+        return
+    config = load_config()
 
 # --- MQTT Setup (optional) ---
 mqtt_client = None
@@ -595,6 +661,8 @@ def admin():
     current_tab = request.args.get('tab', 'ukeplan')
 
     if request.method == 'POST':
+        # Always reload to avoid stale worker state during writes.
+        config = load_config()
         action = request.form.get('action')
         current_tab = request.form.get('current_tab', 'ukeplan') 
 
@@ -714,11 +782,13 @@ def admin():
         elif action == 'set_calendar_assignments':
             # For each plan, read selected calendar IDs
             assignments: Dict[str, List[str]] = {}
+            calendar_ids = {cal.get('id') for cal in config.get('calendar_urls', []) if cal.get('id')}
             for plan in config.get('weekplans', []):
                 key = plan['key']
-                selected = request.form.getlist(f'assign_{key}')
+                selected = [cid for cid in request.form.getlist(f'assign_{key}') if cid in calendar_ids]
                 assignments[key] = selected
             config['calendar_assignments'] = assignments
+            logger.info(f"Saved calendar assignments for {len(assignments)} plans")
             save_config(config)
 
         elif action == 'add_calendar':
@@ -737,12 +807,33 @@ def admin():
                         'id': str(uuid.uuid4())
                     })
                     save_config(config)
+                    logger.info(f"Added calendar: {calendar_name} ({calendar_url})")
+                else:
+                    logger.info(f"Calendar already exists for URL: {calendar_url}")
                     
         elif action == 'remove_calendar':
             calendar_id = request.form.get('calendar_id')
-            if calendar_id:
-                config['calendar_urls'] = [cal for cal in config.get('calendar_urls', []) if cal.get('id') != calendar_id]
+            calendar_url = request.form.get('calendar_url', '').strip()
+            if calendar_id or calendar_url:
+                before_count = len(config.get('calendar_urls', []))
+                def _keep_calendar(cal):
+                    if calendar_id and cal.get('id') == calendar_id:
+                        return False
+                    if calendar_url and not cal.get('id') and cal.get('url') == calendar_url:
+                        return False
+                    return True
+                config['calendar_urls'] = [cal for cal in config.get('calendar_urls', []) if _keep_calendar(cal)]
+                after_count = len(config.get('calendar_urls', []))
+                # Remove from assignments too (only applies to calendars with ids)
+                if calendar_id:
+                    assignments = config.get('calendar_assignments', {}) or {}
+                    for key, assigned in assignments.items():
+                        assignments[key] = [cid for cid in assigned if cid != calendar_id]
+                    config['calendar_assignments'] = assignments
                 save_config(config)
+                logger.info(f"Removed calendar (id={calendar_id or 'n/a'}, url={calendar_url or 'n/a'}) ({before_count} -> {after_count})")
+            else:
+                logger.warning("remove_calendar called without calendar_id or calendar_url")
             
         elif action == 'set_brightness':
             brightness_pct = request.form.get('brightness', '75')

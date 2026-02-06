@@ -7,3 +7,4 @@ paho-mqtt
 werkzeug
 icalendar
 recurring-ical-events
+gunicorn
