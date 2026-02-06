@@ -31,10 +31,11 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 
 3. Run the container:
    ```bash
+   mkdir -p data/static data/uploads
+   cp config.json data/config.json
+
    docker run --rm -p 8080:80 \
-     -v "$(pwd)/config.json:/app/config.json" \
-     -v "$(pwd)/static:/app/static" \
-     -v "$(pwd)/uploads:/app/uploads" \
+     -v "$(pwd)/data:/data" \
      weekplans
    ```
 
@@ -44,7 +45,7 @@ Then open:
 
 Notes:
 - `poppler-utils` is included in the image for PDF conversion.
-- The volume mounts keep settings and uploads between restarts.
+- The `/data` volume holds `config.json`, uploads, and generated images.
 
 ## Configuration
 

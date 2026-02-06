@@ -8,6 +8,7 @@ RUN npm run build
 
 FROM python:3.11-slim-bookworm AS runtime
 ENV PYTHONUNBUFFERED=1
+ENV DATA_DIR=/data
 WORKDIR /app
 
 RUN apt-get update \

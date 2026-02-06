@@ -30,8 +30,11 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # Base directory and folders
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
+DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
+if not os.path.isabs(DATA_DIR):
+    DATA_DIR = os.path.join(BASE_DIR, DATA_DIR)
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
+STATIC_FOLDER = os.path.join(DATA_DIR, 'static')
 STATIC_IMAGE_FOLDER = os.path.join(STATIC_FOLDER, 'images')
 SCREENSAVER_FOLDER = os.path.join(STATIC_FOLDER, 'screensaver')
 
@@ -42,9 +45,9 @@ os.makedirs(SCREENSAVER_FOLDER, exist_ok=True)
 os.makedirs(os.path.join(STATIC_FOLDER, 'js'), exist_ok=True)
 
 # Files for persistent settings and dynamic state
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-UPDATE_FILE = os.path.join(BASE_DIR, 'last_updates.json')
-DASHBOARD_MODE_FILE = os.path.join(BASE_DIR, 'dashboard_mode.json')
+CONFIG_FILE = os.path.join(DATA_DIR, 'config.json')
+UPDATE_FILE = os.path.join(DATA_DIR, 'last_updates.json')
+DASHBOARD_MODE_FILE = os.path.join(DATA_DIR, 'dashboard_mode.json')
 
 # Allowed file extensions for security
 ALLOWED_PDF_EXTENSIONS = {'pdf'}
@@ -324,7 +327,7 @@ def get_forced_dashboard_view(default_view: str = "all") -> str:
     except (json.JSONDecodeError, IOError):
         return default_view
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=STATIC_FOLDER)
 
 # Configure Flask for large file uploads (50MB max)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
