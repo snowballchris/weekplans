@@ -24,6 +24,39 @@ type CalendarEvent = {
   calendar_color?: string
 }
 
+type ScreensaverButton = {
+  enabled: boolean
+  label: string
+  action: 'plan1' | 'plan2' | 'all' | 'url'
+  url?: string
+  use_custom_color?: boolean
+  color?: string
+}
+
+type ScreensaverButtonsPosition = {
+  horizontal: 'left' | 'center' | 'right'
+  vertical: 'top' | 'center' | 'bottom'
+}
+
+function isLightColor(hex: string): boolean {
+  const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i)
+  if (!m) return false
+  const r = parseInt(m[1], 16) / 255
+  const g = parseInt(m[2], 16) / 255
+  const b = parseInt(m[3], 16) / 255
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+  return luminance > 0.5
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i)
+  if (!m) return `rgba(255,255,255,${alpha})`
+  const r = parseInt(m[1], 16)
+  const g = parseInt(m[2], 16)
+  const b = parseInt(m[3], 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
 function useModePolling(intervalMs: number) {
   const [isDashboard, setIsDashboard] = useState(false)
   const [view, setView] = useState<'all' | 'plan1' | 'plan2'>('all')
@@ -53,7 +86,24 @@ function App() {
   const [weekplans, setWeekplans] = useState<Weekplan[]>([])
   const { isDashboard, view, language } = useModePolling(1000)
   const [screensaverUrl, setScreensaverUrl] = useState('')
+  const [screensaverButtons, setScreensaverButtons] = useState<ScreensaverButton[]>([])
+  const [screensaverButtonsPosition, setScreensaverButtonsPosition] = useState<ScreensaverButtonsPosition>({ horizontal: 'center', vertical: 'bottom' })
   const isPortrait = useIsPortrait(1) // width/height < 1 means portrait/square
+
+  // Fetch screensaver button config on mount
+  useEffect(() => {
+    fetch('/api/screensaver_buttons')
+      .then(r => r.json())
+      .then((data: { buttons?: ScreensaverButton[]; position?: ScreensaverButtonsPosition }) => {
+        if (Array.isArray(data)) {
+          setScreensaverButtons(data)
+        } else {
+          setScreensaverButtons(data.buttons || [])
+          if (data.position) setScreensaverButtonsPosition(data.position)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // Keyboard shortcuts: Left = plan1, Right = plan2, Up = all
   useEffect(() => {
@@ -105,12 +155,73 @@ function App() {
     }
   }, [isDashboard, screensaverUrl])
 
+  const handleScreensaverButtonClick = (btn: ScreensaverButton) => {
+    if (btn.action === 'url') {
+      if (btn.url) window.location.href = btn.url
+      return
+    }
+    const form = new FormData()
+    form.append('action', 'show_week_plan')
+    form.append('current_tab', 'ukeplan')
+    form.append('view', btn.action)
+    fetch('/admin', { method: 'POST', body: form })
+      .then(() => fetch('/mode').then(r => r.json()).then(() => fetch('/api/weekplans').then(r => r.json()).then(setWeekplans)))
+      .catch(() => {})
+  }
+
+  const enabledButtons = screensaverButtons.filter(b => b.enabled)
+
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: isDashboard ? 'transparent' : 'black' }}>
       {!isDashboard && (
         <div style={{ position: 'absolute', inset: 0 }}>
           {screensaverUrl && (
             <img src={screensaverUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          )}
+          {enabledButtons.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              ...(screensaverButtonsPosition.vertical === 'top' && { top: 0, bottom: 'auto' }),
+              ...(screensaverButtonsPosition.vertical === 'center' && { top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }),
+              ...(screensaverButtonsPosition.vertical === 'bottom' && { bottom: 0, top: 'auto' }),
+              left: 0,
+              right: 0,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              padding: '1.5rem',
+              justifyContent: screensaverButtonsPosition.horizontal === 'left' ? 'flex-start' : screensaverButtonsPosition.horizontal === 'right' ? 'flex-end' : 'center',
+              alignItems: 'center',
+              background: screensaverButtonsPosition.vertical === 'top'
+                ? 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)'
+                : screensaverButtonsPosition.vertical === 'center'
+                  ? 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.4), transparent)'
+                  : 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+            }}>
+              {enabledButtons.map((btn, idx) => {
+                const useCustom = btn.use_custom_color && btn.color
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleScreensaverButtonClick(btn)}
+                    style={{
+                      padding: '0.75rem 1.25rem',
+                      fontSize: '1rem',
+                      fontWeight: 500,
+                      color: useCustom ? (isLightColor(btn.color!) ? '#333' : 'white') : 'white',
+                      background: useCustom ? hexToRgba(btn.color!, 0.2) : 'rgba(255,255,255,0.2)',
+                      border: useCustom ? `1px solid ${hexToRgba(btn.color!, 0.5)}` : '1px solid rgba(255,255,255,0.5)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    {btn.label}
+                  </button>
+                )
+              })}
+            </div>
           )}
         </div>
       )}

@@ -361,6 +361,81 @@
                     <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the weekplan names and icons."><i class="fas fa-save me-1"></i>Set Weekplan Details</button>
                 </form>
 
+                <hr><h6>Screensaver Buttons</h6>
+                <p class="text-muted mb-3">Optional buttons shown on the screensaver screen. Enable and customize each button. Labels appear on the screensaver when the option is active.</p>
+                <form method="POST" action="{{ url_for('admin') }}" class="mb-4">
+                    <input type="hidden" name="action" value="set_screensaver_buttons"><input type="hidden" name="current_tab" value="settings">
+                    {% set pos = config.get('screensaver_buttons_position', {}) or {} %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">Button group position</h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="screensaver_buttons_horizontal" class="form-label small mb-0">Horizontal</label>
+                                    <select class="form-select form-select-sm" name="screensaver_buttons_horizontal" id="screensaver_buttons_horizontal">
+                                        <option value="left" {% if pos.get('horizontal') == 'left' %}selected{% endif %}>Left</option>
+                                        <option value="center" {% if pos.get('horizontal', 'center') == 'center' %}selected{% endif %}>Center</option>
+                                        <option value="right" {% if pos.get('horizontal') == 'right' %}selected{% endif %}>Right</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="screensaver_buttons_vertical" class="form-label small mb-0">Vertical</label>
+                                    <select class="form-select form-select-sm" name="screensaver_buttons_vertical" id="screensaver_buttons_vertical">
+                                        <option value="top" {% if pos.get('vertical') == 'top' %}selected{% endif %}>Top</option>
+                                        <option value="center" {% if pos.get('vertical') == 'center' %}selected{% endif %}>Center</option>
+                                        <option value="bottom" {% if pos.get('vertical', 'bottom') == 'bottom' %}selected{% endif %}>Bottom</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% set btn_configs = [
+                      ('Show Weekplan 1', 'plan1', false),
+                      ('Show Weekplan 2', 'plan2', false),
+                      ('Show both weekplans', 'all', false),
+                      ('Custom URL', 'url', true)
+                    ] %}
+                    {% set screensaver_btns = config.get('screensaver_buttons', []) %}
+                    {% for i in range(4) %}
+                    {% set btn = screensaver_btns[i] if i < screensaver_btns|length else {} %}
+                    {% set default_label = btn_configs[i][0] %}
+                    {% set is_url = btn_configs[i][2] %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row align-items-center flex-wrap">
+                                <div class="col-auto">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" name="screensaver_btn_{{ i }}_enabled" id="screensaver_btn_{{ i }}_enabled" {% if btn.get('enabled') %}checked{% endif %} value="1">
+                                        <label class="form-check-label" for="screensaver_btn_{{ i }}_enabled">Enable</label>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <label for="screensaver_btn_{{ i }}_label" class="form-label small mb-0">Button label</label>
+                                    <input type="text" class="form-control form-control-sm" name="screensaver_btn_{{ i }}_label" id="screensaver_btn_{{ i }}_label" value="{{ btn.get('label', default_label) }}" placeholder="{{ default_label }}">
+                                </div>
+                                {% if is_url %}
+                                <div class="col">
+                                    <label for="screensaver_btn_{{ i }}_url" class="form-label small mb-0">URL (opens in browser when pressed)</label>
+                                    <input type="url" class="form-control form-control-sm" name="screensaver_btn_{{ i }}_url" id="screensaver_btn_{{ i }}_url" value="{{ btn.get('url', '') }}" placeholder="https://example.com">
+                                </div>
+                                {% endif %}
+                                <div class="col-auto">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" name="screensaver_btn_{{ i }}_use_custom_color" id="screensaver_btn_{{ i }}_use_custom_color" {% if btn.get('use_custom_color') %}checked{% endif %} value="1">
+                                        <label class="form-check-label" for="screensaver_btn_{{ i }}_use_custom_color">Custom colour</label>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <input type="color" class="form-control form-control-color" name="screensaver_btn_{{ i }}_color" id="screensaver_btn_{{ i }}_color" value="{{ btn.get('color', '#ffffff') }}" title="Button colour">
+                                        <label for="screensaver_btn_{{ i }}_color" class="form-label small mb-0 text-muted">Colour</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves screensaver button settings."><i class="fas fa-save me-1"></i>Save Screensaver Buttons</button>
+                </form>
+
                 <hr><h6 id="mqtt-config">MQTT Configuration
                   <i class="fas fa-info-circle text-muted ms-2"
                      data-bs-toggle="tooltip"

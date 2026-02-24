@@ -229,6 +229,13 @@ def load_config():
     return {
         "dashboard_duration": 10,
         "screensaver_config": [],
+        "screensaver_buttons": [
+            {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
+            {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
+            {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
+            {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+        ],
+        "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom"},
         "enable_mqtt": False,
         "mqtt_broker": "homeassistant.local",
         "mqtt_port": 1883,
@@ -549,6 +556,38 @@ def mode():
         "language": config.get("dashboard_language", "en-GB")
     })
 
+@app.route("/api/screensaver_buttons")
+def api_screensaver_buttons():
+    """Return screensaver button configuration for the display."""
+    buttons = list(config.get("screensaver_buttons", []))
+    defaults = [
+        {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
+        {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
+        {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
+        {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+    ]
+    for i, d in enumerate(defaults):
+        if i >= len(buttons):
+            buttons.append(d)
+        else:
+            b = buttons[i]
+            buttons[i] = {
+                "enabled": bool(b.get("enabled", False)),
+                "label": str(b.get("label", d["label"])),
+                "action": b.get("action", d["action"]),
+                "url": str(b.get("url", "")) if b.get("action") == "url" else "",
+                "use_custom_color": bool(b.get("use_custom_color", False)),
+                "color": str(b.get("color", "#ffffff")) if b.get("color") else "#ffffff",
+            }
+    pos = config.get("screensaver_buttons_position", {}) or {}
+    h = pos.get("horizontal", "center")
+    v = pos.get("vertical", "bottom")
+    if h not in ("left", "center", "right"):
+        h = "center"
+    if v not in ("top", "center", "bottom"):
+        v = "bottom"
+    return jsonify({"buttons": buttons[:4], "position": {"horizontal": h, "vertical": v}})
+
 @app.route("/screensaver_image")
 def screensaver_image():
     """API endpoint to get a random screensaver image URL."""
@@ -773,7 +812,36 @@ def admin():
                 plan['name'] = request.form.get(f"name_{plan['key']}", plan['name'])
                 plan['icon'] = request.form.get(f"icon_{plan['key']}", plan['icon'])
             save_config(config)
-        
+
+        elif action == 'set_screensaver_buttons':
+            defaults = [
+                {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
+                {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
+                {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
+                {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+            ]
+            buttons = []
+            for i, d in enumerate(defaults):
+                enabled = f"screensaver_btn_{i}_enabled" in request.form
+                label = request.form.get(f"screensaver_btn_{i}_label", d["label"]).strip() or d["label"]
+                action = d["action"]
+                url = request.form.get(f"screensaver_btn_{i}_url", "").strip() if action == "url" else ""
+                use_custom_color = f"screensaver_btn_{i}_use_custom_color" in request.form
+                color = request.form.get(f"screensaver_btn_{i}_color", "#ffffff").strip() or "#ffffff"
+                btn = {"enabled": enabled, "label": label, "action": action, "use_custom_color": use_custom_color, "color": color}
+                if action == "url":
+                    btn["url"] = url
+                buttons.append(btn)
+            config["screensaver_buttons"] = buttons
+            h = request.form.get("screensaver_buttons_horizontal", "center")
+            v = request.form.get("screensaver_buttons_vertical", "bottom")
+            if h not in ("left", "center", "right"):
+                h = "center"
+            if v not in ("top", "center", "bottom"):
+                v = "bottom"
+            config["screensaver_buttons_position"] = {"horizontal": h, "vertical": v}
+            save_config(config)
+
         elif action == 'set_mqtt_config':
             config['enable_mqtt'] = 'enable_mqtt' in request.form
             config['mqtt_broker'] = request.form.get('mqtt_broker', 'homeassistant.local')
