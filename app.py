@@ -230,10 +230,10 @@ def load_config():
         "dashboard_duration": 10,
         "screensaver_config": [],
         "screensaver_buttons": [
-            {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
-            {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
-            {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
-            {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+            {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+            {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+            {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+            {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
         ],
         "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom"},
         "enable_mqtt": False,
@@ -561,16 +561,19 @@ def api_screensaver_buttons():
     """Return screensaver button configuration for the display."""
     buttons = list(config.get("screensaver_buttons", []))
     defaults = [
-        {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
-        {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
-        {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
-        {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+        {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+        {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+        {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+        {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
     ]
     for i, d in enumerate(defaults):
         if i >= len(buttons):
             buttons.append(d)
         else:
             b = buttons[i]
+            fc = b.get("font_color", "auto")
+            if fc not in ("auto", "white", "black"):
+                fc = "auto"
             buttons[i] = {
                 "enabled": bool(b.get("enabled", False)),
                 "label": str(b.get("label", d["label"])),
@@ -578,6 +581,7 @@ def api_screensaver_buttons():
                 "url": str(b.get("url", "")) if b.get("action") == "url" else "",
                 "use_custom_color": bool(b.get("use_custom_color", False)),
                 "color": str(b.get("color", "#ffffff")) if b.get("color") else "#ffffff",
+                "font_color": fc,
             }
     pos = config.get("screensaver_buttons_position", {}) or {}
     h = pos.get("horizontal", "center")
@@ -815,10 +819,10 @@ def admin():
 
         elif action == 'set_screensaver_buttons':
             defaults = [
-                {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff"},
-                {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff"},
-                {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff"},
-                {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff"},
+                {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+                {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+                {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+                {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
             ]
             buttons = []
             for i, d in enumerate(defaults):
@@ -828,7 +832,10 @@ def admin():
                 url = request.form.get(f"screensaver_btn_{i}_url", "").strip() if action == "url" else ""
                 use_custom_color = f"screensaver_btn_{i}_use_custom_color" in request.form
                 color = request.form.get(f"screensaver_btn_{i}_color", "#ffffff").strip() or "#ffffff"
-                btn = {"enabled": enabled, "label": label, "action": action, "use_custom_color": use_custom_color, "color": color}
+                font_color = request.form.get(f"screensaver_btn_{i}_font_color", "auto")
+                if font_color not in ("auto", "white", "black"):
+                    font_color = "auto"
+                btn = {"enabled": enabled, "label": label, "action": action, "use_custom_color": use_custom_color, "color": color, "font_color": font_color}
                 if action == "url":
                     btn["url"] = url
                 buttons.append(btn)

@@ -31,6 +31,7 @@ type ScreensaverButton = {
   url?: string
   use_custom_color?: boolean
   color?: string
+  font_color?: 'auto' | 'white' | 'black'
 }
 
 type ScreensaverButtonsPosition = {
@@ -209,7 +210,12 @@ function App() {
                       padding: '0.75rem 1.25rem',
                       fontSize: '1rem',
                       fontWeight: 500,
-                      color: useCustom ? (isLightColor(btn.color!) ? '#333' : 'white') : 'white',
+                      color: (() => {
+                        const fc = btn.font_color || 'auto'
+                        if (fc === 'white') return 'white'
+                        if (fc === 'black') return '#333'
+                        return useCustom ? (isLightColor(btn.color!) ? '#333' : 'white') : 'white'
+                      })(),
                       background: useCustom ? hexToRgba(btn.color!, 0.2) : 'rgba(255,255,255,0.2)',
                       border: useCustom ? `1px solid ${hexToRgba(btn.color!, 0.5)}` : '1px solid rgba(255,255,255,0.5)',
                       borderRadius: 8,

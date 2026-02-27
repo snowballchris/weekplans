@@ -429,6 +429,14 @@
                                         <label for="screensaver_btn_{{ i }}_color" class="form-label small mb-0 text-muted">Colour</label>
                                     </div>
                                 </div>
+                                <div class="col-auto">
+                                    <label for="screensaver_btn_{{ i }}_font_color" class="form-label small mb-0">Font colour</label>
+                                    <select class="form-select form-select-sm" name="screensaver_btn_{{ i }}_font_color" id="screensaver_btn_{{ i }}_font_color">
+                                        <option value="auto" {% if btn.get('font_color', 'auto') == 'auto' %}selected{% endif %}>Auto</option>
+                                        <option value="white" {% if btn.get('font_color') == 'white' %}selected{% endif %}>White</option>
+                                        <option value="black" {% if btn.get('font_color') == 'black' %}selected{% endif %}>Black</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
