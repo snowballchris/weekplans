@@ -1,0 +1,16 @@
+{
+  "dashboard_duration": 10,
+  "screensaver_config": [],
+  "enable_mqtt": false,
+  "mqtt_broker": "homeassistant.local",
+  "mqtt_port": 1883,
+  "mqtt_user": "",
+  "mqtt_pass": "",
+  "weekplans": [
+    {"key": "plan1", "name": "Weekplan 1", "icon": "1"},
+    {"key": "plan2", "name": "Weekplan 2", "icon": "2"}
+  ],
+  "calendar_urls": [],
+  "calendar_assignments": {},
+  "dashboard_language": "en-GB"
+}
