@@ -217,16 +217,109 @@ def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
         return []
 
 # --- Configuration Management ---
+# Env var names for MQTT overrides (Docker/HA). HA Supervisor may pass MQTT_* from options.
+# Per config_key: list of (env_var_name, parser); first set env var wins.
+_ENV_MQTT_MAP = {
+    "enable_mqtt": [
+        ("WEEKPLANS_ENABLE_MQTT", lambda v: v.lower() in ("1", "true", "yes")),
+        ("MQTT_ENABLED", lambda v: v.lower() in ("1", "true", "yes")),
+    ],
+    "mqtt_broker": [("WEEKPLANS_MQTT_BROKER", str), ("MQTT_BROKER", str)],
+    "mqtt_port": [("WEEKPLANS_MQTT_PORT", lambda v: int(v)), ("MQTT_PORT", lambda v: int(v))],
+    "mqtt_user": [("WEEKPLANS_MQTT_USER", str), ("MQTT_USER", str)],
+    "mqtt_pass": [("WEEKPLANS_MQTT_PASS", str), ("MQTT_PASS", str)],
+}
+
+
+def _apply_env_overrides(config: dict) -> dict:
+    """Override config with env vars when set. WEEKPLANS_* takes precedence over MQTT_*."""
+    for config_key, env_parsers in _ENV_MQTT_MAP.items():
+        for env_key, parser in env_parsers:
+            val = os.environ.get(env_key)
+            if val is not None and val != "":
+                try:
+                    config[config_key] = parser(val)
+                except (ValueError, TypeError):
+                    pass
+                break
+    return config
+
+
+def get_mqtt_env_controlled() -> set:
+    """Return the set of MQTT config keys that are currently overridden by environment variables."""
+    controlled = set()
+    for config_key, env_parsers in _ENV_MQTT_MAP.items():
+        for env_key, _ in env_parsers:
+            val = os.environ.get(env_key)
+            if val is not None and val != "":
+                controlled.add(config_key)
+                break
+    return controlled
+
+
+def get_mqtt_options_controlled() -> set:
+    """Return the set of MQTT config keys overridden by Home Assistant options.json."""
+    options_file = os.path.join(DATA_DIR, "options.json")
+    if not os.path.exists(options_file):
+        return set()
+    controlled = set()
+    try:
+        with open(options_file, "r", encoding="utf-8") as f:
+            opts = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return set()
+    if opts.get("mqtt_enabled") is not None:
+        controlled.add("enable_mqtt")
+    if opts.get("mqtt_broker"):
+        controlled.add("mqtt_broker")
+    if opts.get("mqtt_port") is not None:
+        controlled.add("mqtt_port")
+    if "mqtt_user" in opts:
+        controlled.add("mqtt_user")
+    if "mqtt_pass" in opts:
+        controlled.add("mqtt_pass")
+    return controlled
+
+
+def _apply_options_json_overrides(config: dict) -> dict:
+    """Override MQTT config from Home Assistant options.json when present."""
+    options_file = os.path.join(DATA_DIR, "options.json")
+    if not os.path.exists(options_file):
+        return config
+    try:
+        with open(options_file, "r", encoding="utf-8") as f:
+            opts = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return config
+    if opts.get("mqtt_enabled") is not None:
+        config["enable_mqtt"] = bool(opts["mqtt_enabled"])
+    if opts.get("mqtt_broker"):
+        config["mqtt_broker"] = str(opts["mqtt_broker"])
+    if opts.get("mqtt_port") is not None:
+        try:
+            config["mqtt_port"] = int(opts["mqtt_port"])
+        except (ValueError, TypeError):
+            pass
+    if "mqtt_user" in opts:
+        config["mqtt_user"] = str(opts.get("mqtt_user", ""))
+    if "mqtt_pass" in opts:
+        config["mqtt_pass"] = str(opts.get("mqtt_pass", ""))
+    return config
+
+
 def load_config():
-    """Load the main configuration from config.json."""
+    """Load the main configuration from config.json, with env var and options.json overrides."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                config = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             logger.error(f"Error loading config file: {e}")
-    # Default configuration
-    return {
+            config = {}
+    else:
+        config = {}
+    # Default configuration (merge with loaded)
+    defaults = {
         "dashboard_duration": 10,
         "screensaver_config": [],
         "screensaver_buttons": [
@@ -249,6 +342,11 @@ def load_config():
         "calendar_assignments": {},
         "dashboard_language": "en-GB"
     }
+    for key, value in defaults.items():
+        if key not in config:
+            config[key] = value
+    config = _apply_options_json_overrides(config)
+    return _apply_env_overrides(config)
 
 def save_config(config_data):
     """Save the configuration to config.json."""
@@ -850,11 +948,19 @@ def admin():
             save_config(config)
 
         elif action == 'set_mqtt_config':
-            config['enable_mqtt'] = 'enable_mqtt' in request.form
-            config['mqtt_broker'] = request.form.get('mqtt_broker', 'homeassistant.local')
-            config['mqtt_port'] = int(request.form.get('mqtt_port', 1883))
-            config['mqtt_user'] = request.form.get('mqtt_user', '')
-            config['mqtt_pass'] = request.form.get('mqtt_pass', '')
+            env_controlled = get_mqtt_env_controlled()
+            options_controlled = get_mqtt_options_controlled()
+            externally_controlled = env_controlled | options_controlled
+            if 'enable_mqtt' not in externally_controlled:
+                config['enable_mqtt'] = 'enable_mqtt' in request.form
+            if 'mqtt_broker' not in externally_controlled:
+                config['mqtt_broker'] = request.form.get('mqtt_broker', 'homeassistant.local')
+            if 'mqtt_port' not in externally_controlled:
+                config['mqtt_port'] = int(request.form.get('mqtt_port', 1883))
+            if 'mqtt_user' not in externally_controlled:
+                config['mqtt_user'] = request.form.get('mqtt_user', '')
+            if 'mqtt_pass' not in externally_controlled:
+                config['mqtt_pass'] = request.form.get('mqtt_pass', '')
             save_config(config)
             
         elif action == 'set_calendar_assignments':
@@ -967,6 +1073,9 @@ def admin():
 
     system_stats = get_system_stats()
     mqtt_connected = config.get('enable_mqtt') and mqtt_client is not None and mqtt_client.is_connected()
+    mqtt_env_controlled = get_mqtt_env_controlled()
+    mqtt_options_controlled = get_mqtt_options_controlled()
+    mqtt_externally_controlled = bool(mqtt_env_controlled or mqtt_options_controlled)
 
     return render_template(
         'admin.html',
@@ -975,6 +1084,9 @@ def admin():
         system_stats=system_stats,
         mqtt_stats=mqtt_stats,
         mqtt_connected=mqtt_connected,
+        mqtt_env_controlled=mqtt_env_controlled,
+        mqtt_options_controlled=mqtt_options_controlled,
+        mqtt_externally_controlled=mqtt_externally_controlled,
         current_tab=current_tab
     )
 

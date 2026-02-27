@@ -58,6 +58,39 @@ Notes:
 - `poppler-utils` is included in the image for PDF conversion.
 - The `/data` volume holds `config.json`, uploads, and generated images.
 
+### Environment variables (optional)
+
+You can override MQTT settings via environment variables. When set, these take precedence over `config.json` and the admin panel will show them as read-only:
+
+| Variable | Description |
+|----------|-------------|
+| `WEEKPLANS_ENABLE_MQTT` | Enable MQTT (`1`, `true`, or `yes`) |
+| `WEEKPLANS_MQTT_BROKER` | MQTT broker hostname |
+| `WEEKPLANS_MQTT_PORT` | MQTT port (default 1883) |
+| `WEEKPLANS_MQTT_USER` | MQTT username |
+| `WEEKPLANS_MQTT_PASS` | MQTT password |
+
+Example with env vars:
+```bash
+docker run --rm -p 8080:80 \
+  -v "$(pwd)/data:/data" \
+  -e WEEKPLANS_ENABLE_MQTT=true \
+  -e WEEKPLANS_MQTT_BROKER=homeassistant.local \
+  ghcr.io/snowballchris/weekplans:latest
+```
+
+## Home Assistant App
+
+WeekPlans can run as a Home Assistant app (formerly add-on). Add this repository in Home Assistant:
+
+1. Go to **Settings** → **Apps** → **App repositories**
+2. Add: `https://github.com/snowballchris/weekplans`
+3. Install the WeekPlans app from the Apps store
+4. Configure MQTT (optional) in the app settings
+5. Open `http://<your-ha-ip>:8080` for the dashboard and admin
+
+The same Docker image works for both standalone Docker and Home Assistant. MQTT is optional in both modes.
+
 ## Configuration
 
 The application uses several configuration files:
