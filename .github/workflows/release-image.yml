@@ -59,11 +59,8 @@ jobs:
         if: github.event_name == 'release'
         run: |
           VERSION="${{ steps.version.outputs.version_plain }}"
-          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-            sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans_beta/config.yaml
-          else
-            sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans/config.yaml
-          fi
+          sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans/config.yaml
+          sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans_beta/config.yaml
 
       - uses: docker/build-push-action@v5
         with:

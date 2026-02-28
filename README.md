@@ -100,6 +100,12 @@ WeekPlans can run as a Home Assistant app (formerly add-on). Add this repository
 
 The same Docker image works for both standalone Docker and Home Assistant. MQTT is optional in both modes.
 
+If the apps do not appear after adding the repository:
+1. Try refreshing the Apps store (pull to refresh or reload the page)
+2. Try adding the repository with the full URL: `https://github.com/snowballchris/weekplans`
+3. Remove and re-add the repository
+4. Check **Settings → System → Logs** (Supervisor) for any repository loading errors
+
 ## Configuration
 
 The application uses several configuration files:

@@ -1,6 +1,6 @@
 name: WeekPlans Beta
 description: Beta releases of WeekPlans. Digital weekly schedule display for home automation. May be unstable - for testing only.
-version: "0.0.0"
+version: "2026.02.28.2"
 slug: weekplans_beta
 arch:
   - aarch64

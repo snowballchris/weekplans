@@ -1,3 +1,4 @@
+# https://developers.home-assistant.io/docs/add-ons/repository#repository-configuration
 name: WeekPlans
-url: https://github.com/snowballchris/weekplans
+url: 'https://github.com/snowballchris/weekplans'
 maintainer: snowballchris <https://github.com/snowballchris>
