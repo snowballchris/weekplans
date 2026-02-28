@@ -35,7 +35,7 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 2. Run the container:
    ```bash
    mkdir -p data/static data/uploads
-   cp example/config.example.json data/config.json
+   cp example/app-config.example.json data/config.json
 
    docker run --rm -p 8080:80 \
      -v "$(pwd)/data:/data" \
@@ -52,7 +52,7 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 4. Run the locally built image:
    ```bash
    mkdir -p data/static data/uploads
-   cp example/config.example.json data/config.json
+   cp example/app-config.example.json data/config.json
 
    docker run --rm -p 8080:80 \
      -v "$(pwd)/data:/data" \
@@ -94,7 +94,7 @@ WeekPlans can run as a Home Assistant app (formerly add-on). Add this repository
 
 1. Go to **Settings** → **Apps** → **App repositories**
 2. Add: `https://github.com/snowballchris/weekplans`
-3. Install **WeekPlans** (stable) or **WeekPlans Beta** from the Apps store
+3. Install **WeekPlans** from the Apps store
 4. Configure MQTT (optional) in the app settings
 5. Use the **Open Web UI** button in the Apps view to open the admin panel, or open `http://<your-ha-ip>:8080` for the dashboard and admin
 
@@ -110,7 +110,7 @@ If the apps do not appear after adding the repository:
 
 The application uses several configuration files:
 
-- `config.json`: Main configuration file (copy from `example/config.example.json` for first run)
+- `config.json`: Main configuration file (copy from `example/app-config.example.json` for first run)
   - Dashboard duration and language
   - Screensaver settings and buttons
   - MQTT configuration
@@ -190,7 +190,7 @@ The Docker container serves the dashboard and admin interface:
 weekplans/
 ├── app.py              # Main Flask application
 ├── example/
-│   └── config.example.json  # Example configuration (copy to data/config.json)
+│   └── app-config.example.json  # Example configuration (copy to data/config.json)
 ├── requirements.txt    # Python dependencies
 ├── frontend/          # React frontend
 ├── static/

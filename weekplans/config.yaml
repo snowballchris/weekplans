@@ -14,7 +14,7 @@ ingress_entry: /admin
 webui: "http://[HOST]:[PORT:80]/admin"
 panel_icon: mdi:calendar-week
 panel_title: WeekPlans Admin
-image: ghcr.io/snowballchris/weekplans:stable
+image: ghcr.io/snowballchris/weekplans
 options:
   mqtt_enabled: false
   mqtt_broker: "core-mosquitto"
