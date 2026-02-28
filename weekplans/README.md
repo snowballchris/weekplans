@@ -1,4 +1,4 @@
-# <img src="icon.png" alt="" height="1em" style="vertical-align: middle; margin-right: 8px;"> WeekPlans - Home Assistant App
+# <img src="icon.png" alt="" height="50em" style="vertical-align: middle; margin-right: 8px;"> WeekPlans - Home Assistant App
 
 Digital weekly schedule display for home automation. Perfect for information radiators, tablet dashboards, or any display showing weekly plans.
 
