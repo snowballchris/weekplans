@@ -25,9 +25,9 @@ Digital weekly schedule display for home automation. Perfect for information rad
    - **Broker**: Use `core-mosquitto` if you have the Mosquitto broker add-on, or your MQTT broker hostname
    - MQTT is optional—the app works without it
 
-4. Start the app and open `http://<your-ha-ip>:8080`
-   - Dashboard: `/`
-   - Admin panel: `/admin`
+4. Start the app and access it:
+   - **Open Web UI** button in the Apps view opens the admin panel directly
+   - Or open `http://<your-ha-ip>:8080` (dashboard: `/`, admin: `/admin`)
 
 ## Configuration
 

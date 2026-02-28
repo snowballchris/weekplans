@@ -87,7 +87,7 @@ WeekPlans can run as a Home Assistant app (formerly add-on). Add this repository
 2. Add: `https://github.com/snowballchris/weekplans`
 3. Install the WeekPlans app from the Apps store
 4. Configure MQTT (optional) in the app settings
-5. Open `http://<your-ha-ip>:8080` for the dashboard and admin
+5. Use the **Open Web UI** button in the Apps view to open the admin panel, or open `http://<your-ha-ip>:8080` for the dashboard and admin
 
 The same Docker image works for both standalone Docker and Home Assistant. MQTT is optional in both modes.
 
