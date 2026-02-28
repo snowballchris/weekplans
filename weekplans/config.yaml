@@ -1,6 +1,6 @@
 name: WeekPlans
 description: Digital weekly schedule display for home automation. Shows PDF schedules, calendars, and screensaver images. Optional MQTT integration for Home Assistant.
-version: "2026.02.28a"
+version: "2026.02.28b"
 slug: weekplans
 arch:
   - aarch64
@@ -9,6 +9,8 @@ init: false
 ports:
   80/tcp: 8080
 ingress: true
+ingress_port: 80
+ingress_entry: /admin
 webui: "http://[HOST]:[PORT:80]/admin"
 panel_icon: mdi:calendar-week
 panel_title: WeekPlans Admin

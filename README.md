@@ -1,5 +1,7 @@
 # WeekPlans - Digital Weekly Schedule Display System
 
+![WeekPlans Icon](weekplans/icon.png)
+
 A Flask-based web application designed to display and manage weekly schedules in a digital format. Perfect for home automation displays, information radiators, or any scenario where you need to show and manage weekly plans digitally.
 
 ## Features

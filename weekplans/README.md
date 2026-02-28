@@ -1,5 +1,7 @@
 # WeekPlans - Home Assistant App
 
+![WeekPlans Icon](icon.png)
+
 Digital weekly schedule display for home automation. Perfect for information radiators, tablet dashboards, or any display showing weekly plans.
 
 ## Features
