@@ -26,7 +26,7 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 2. Run the container:
    ```bash
    mkdir -p data/static data/uploads
-   cp config.example.json data/config.json
+   cp example/config.example.json data/config.json
 
    docker run --rm -p 8080:80 \
      -v "$(pwd)/data:/data" \
@@ -43,7 +43,7 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 4. Run the locally built image:
    ```bash
    mkdir -p data/static data/uploads
-   cp config.example.json data/config.json
+   cp example/config.example.json data/config.json
 
    docker run --rm -p 8080:80 \
      -v "$(pwd)/data:/data" \
@@ -95,7 +95,7 @@ The same Docker image works for both standalone Docker and Home Assistant. MQTT 
 
 The application uses several configuration files:
 
-- `config.json`: Main configuration file (copy from `config.example.json` for first run)
+- `config.json`: Main configuration file (copy from `example/config.example.json` for first run)
   - Dashboard duration
   - Screensaver settings
   - MQTT configuration
@@ -155,7 +155,8 @@ The Docker container serves the dashboard and admin interface:
 ```
 weekplans/
 ├── app.py              # Main Flask application
-├── config.example.json # Example configuration (copy to data/config.json)
+├── example/
+│   └── config.example.json  # Example configuration (copy to data/config.json)
 ├── requirements.txt    # Python dependencies
 ├── frontend/          # React frontend
 ├── static/
