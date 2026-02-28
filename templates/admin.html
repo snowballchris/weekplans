@@ -761,5 +761,10 @@
       }
     });
   </script>
+
+  <footer class="mt-5 py-3 text-center text-muted small">
+    WeekPlans by <a href="https://github.com/snowballchris" target="_blank" rel="noopener">snowballchris</a>,
+    version {% if release_url %}<a href="{{ release_url }}" target="_blank" rel="noopener">{{ app_version }}</a>{% else %}{{ app_version }}{% endif %}
+  </footer>
 </body>
 </html>

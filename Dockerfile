@@ -7,8 +7,10 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.11-slim-bookworm AS runtime
+ARG VERSION=dev
 ENV PYTHONUNBUFFERED=1
 ENV DATA_DIR=/data
+ENV WEEKPLANS_VERSION=${VERSION}
 WORKDIR /app
 
 RUN apt-get update \
@@ -32,6 +34,8 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
 
 COPY . /app
 COPY --from=frontend-build /build/frontend/dist /app/frontend/dist
+
+RUN printf '%s\n' "${VERSION}" > /app/VERSION
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

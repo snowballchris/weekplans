@@ -18,9 +18,14 @@ A Flask-based web application designed to display and manage weekly schedules in
 
 WeekPlans is designed to run as a single Docker container that serves the frontend (Nginx) and API (Gunicorn).
 
+**Image tags:**
+- `stable` or `latest` — production-ready releases (equivalent)
+- `beta` — pre-releases for testing
+- `2026.02.28.3` — specific version (replace with actual version)
+
 1. Pull the prebuilt image:
    ```bash
-   docker pull ghcr.io/snowballchris/weekplans:latest
+   docker pull ghcr.io/snowballchris/weekplans:stable
    ```
 
 2. Run the container:
@@ -30,7 +35,7 @@ WeekPlans is designed to run as a single Docker container that serves the fronte
 
    docker run --rm -p 8080:80 \
      -v "$(pwd)/data:/data" \
-     ghcr.io/snowballchris/weekplans:latest
+     ghcr.io/snowballchris/weekplans:stable
    ```
 
 3. Build locally (optional):
@@ -76,7 +81,7 @@ docker run --rm -p 8080:80 \
   -v "$(pwd)/data:/data" \
   -e WEEKPLANS_ENABLE_MQTT=true \
   -e WEEKPLANS_MQTT_BROKER=homeassistant.local \
-  ghcr.io/snowballchris/weekplans:latest
+  ghcr.io/snowballchris/weekplans:stable
 ```
 
 ## Home Assistant App
@@ -85,7 +90,7 @@ WeekPlans can run as a Home Assistant app (formerly add-on). Add this repository
 
 1. Go to **Settings** → **Apps** → **App repositories**
 2. Add: `https://github.com/snowballchris/weekplans`
-3. Install the WeekPlans app from the Apps store
+3. Install **WeekPlans** (stable) or **WeekPlans Beta** from the Apps store
 4. Configure MQTT (optional) in the app settings
 5. Use the **Open Web UI** button in the Apps view to open the admin panel, or open `http://<your-ha-ip>:8080` for the dashboard and admin
 

@@ -2,7 +2,7 @@ name: Build and Publish Docker Image
 
 on:
   release:
-    types: [published]
+    types: [published, edited]
   workflow_dispatch:
 
 jobs:
@@ -13,6 +13,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -22,19 +24,52 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prepare version tags
+      - name: Prepare version and Docker tags
         id: version
         run: |
           REF="${{ github.event.release.tag_name || github.ref_name }}"
+          REF="${REF#refs/heads/}"
+          REF="${REF#refs/tags/}"
+          PLAIN="${REF#v}"
           echo "tag_v=${REF}" >> $GITHUB_OUTPUT
-          echo "tag_plain=${REF#v}" >> $GITHUB_OUTPUT
+          echo "tag_plain=${PLAIN}" >> $GITHUB_OUTPUT
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "version_plain=${PLAIN}" >> $GITHUB_OUTPUT
+            PRERELEASE="${{ github.event.release.prerelease }}"
+            REPO="${{ github.repository }}"
+            echo "tags<<TAGS" >> $GITHUB_OUTPUT
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "ghcr.io/${REPO}:${PLAIN}" >> $GITHUB_OUTPUT
+              echo "ghcr.io/${REPO}:beta" >> $GITHUB_OUTPUT
+            else
+              echo "ghcr.io/${REPO}:latest" >> $GITHUB_OUTPUT
+              echo "ghcr.io/${REPO}:stable" >> $GITHUB_OUTPUT
+              echo "ghcr.io/${REPO}:${PLAIN}" >> $GITHUB_OUTPUT
+            fi
+            echo "TAGS" >> $GITHUB_OUTPUT
+          else
+            echo "version_plain=dev" >> $GITHUB_OUTPUT
+            echo "tags<<TAGS" >> $GITHUB_OUTPUT
+            echo "ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
+            echo "TAGS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update config.yaml version
+        if: github.event_name == 'release'
+        run: |
+          VERSION="${{ steps.version.outputs.version_plain }}"
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans_beta/config.yaml
+          else
+            sed -i "s/^version: .*/version: \"${VERSION}\"/" weekplans/config.yaml
+          fi
 
       - uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag_v }}
-            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag_plain }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version_plain }}
+          tags: ${{ steps.version.outputs.tags }}

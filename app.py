@@ -8,7 +8,7 @@ import uuid
 import requests
 import logging
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
 from pdf2image import convert_from_path
 from urllib.parse import urlparse
 from typing import Optional, Dict, List
@@ -48,6 +48,55 @@ os.makedirs(os.path.join(STATIC_FOLDER, 'js'), exist_ok=True)
 CONFIG_FILE = os.path.join(DATA_DIR, 'config.json')
 UPDATE_FILE = os.path.join(DATA_DIR, 'last_updates.json')
 DASHBOARD_MODE_FILE = os.path.join(DATA_DIR, 'dashboard_mode.json')
+VERSION_FILE = os.path.join(BASE_DIR, 'VERSION')
+
+# App version and release URL (for admin footer)
+GITHUB_OWNER = "snowballchris"
+GITHUB_REPO = "weekplans"
+
+_APP_VERSION_CACHE: Optional[str] = None
+
+
+def get_app_version() -> str:
+    """Read app version from env, VERSION file, or default to 'dev'. Cached after first call."""
+    global _APP_VERSION_CACHE
+    if _APP_VERSION_CACHE is not None:
+        return _APP_VERSION_CACHE
+    version = os.environ.get('WEEKPLANS_VERSION')
+    if version:
+        _APP_VERSION_CACHE = version.strip()
+        return _APP_VERSION_CACHE
+    try:
+        if os.path.exists(VERSION_FILE):
+            with open(VERSION_FILE, 'r', encoding='utf-8') as f:
+                v = f.read().strip() or 'dev'
+                _APP_VERSION_CACHE = v
+                return v
+    except OSError:
+        pass
+    _APP_VERSION_CACHE = 'dev'
+    return 'dev'
+
+
+def get_release_url(version: str) -> Optional[str]:
+    """Return GitHub release URL for this version, or None for dev builds."""
+    if version == 'dev':
+        return None
+    return f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tag/{version}"
+
+
+def redact_url_for_log(raw_url: str) -> str:
+    """Return a safe URL string for logs without query/fragment/userinfo."""
+    try:
+        parsed = urlparse(raw_url)
+    except Exception:
+        return "<invalid-url>"
+    if not parsed.scheme or not parsed.netloc:
+        return "<invalid-url>"
+    host = parsed.hostname or parsed.netloc
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return f"{parsed.scheme}://{host}{parsed.path}"
 
 # Allowed file extensions for security
 ALLOWED_PDF_EXTENSIONS = {'pdf'}
@@ -126,8 +175,9 @@ def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
     # Normalize webcal:// URLs to https:// (webcal is just a protocol hint, not a real protocol)
     normalized_url = ical_url.replace('webcal://', 'https://', 1) if ical_url.startswith('webcal://') else ical_url
     
+    safe_url = redact_url_for_log(normalized_url)
     try:
-        logger.info(f"Fetching calendar from: {normalized_url}")
+        logger.info(f"Fetching calendar from: {safe_url}")
         
         # Fetch the iCal data
         response = requests.get(normalized_url, timeout=10)
@@ -213,7 +263,7 @@ def fetch_calendar_events(ical_url: str, days_ahead: int = 14) -> List[Dict]:
         return events
         
     except Exception as e:
-        logger.error(f"Error fetching calendar from {ical_url} (normalized to {normalized_url}): {e}")
+        logger.error(f"Error fetching calendar from {safe_url}: {e}")
         return []
 
 # --- Configuration Management ---
@@ -482,7 +532,7 @@ if config.get("enable_mqtt"):
                     "name": device_name,
                     "manufacturer": "Weekplans App",
                     "model": "Weekplans Dashboard",
-                    "sw_version": "1.0"
+                    "sw_version": get_app_version()
                 }
                 
                 # Button configurations for each weekplan view
@@ -783,16 +833,8 @@ def api_calendar_events_for(plan_key: str):
 
 @app.route("/api/calendar/debug/<path:calendar_url>", methods=["GET"])
 def api_calendar_debug(calendar_url):
-    """Debug endpoint to test a specific calendar URL."""
-    import urllib.parse
-    decoded_url = urllib.parse.unquote(calendar_url)
-    logger.info(f"Debug testing calendar URL: {decoded_url}")
-    events = fetch_calendar_events(decoded_url)
-    return jsonify({
-        'url': decoded_url,
-        'event_count': len(events),
-        'events': events[:10]  # Return first 10 events for debugging
-    })
+    """Debug endpoint is intentionally disabled in production."""
+    abort(404)
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
@@ -813,7 +855,10 @@ def admin():
         if action == 'upload_pdf':
             file = request.files.get('pdf_file')
             target = request.form.get('target', 'plan1')
-            if file and file.filename and allowed_file(file.filename, ALLOWED_PDF_EXTENSIONS):
+            allowed_targets = {plan.get('key') for plan in config.get("weekplans", []) if plan.get('key')}
+            if target not in allowed_targets:
+                logger.warning(f"Rejected upload_pdf target: {target!r}")
+            elif file and file.filename and allowed_file(file.filename, ALLOWED_PDF_EXTENSIONS):
                 filename = secure_filename(f"{target}.pdf")
                 filepath = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(filepath)
@@ -864,7 +909,7 @@ def admin():
                         config["screensaver_config"].append({"filename": filename, "active": True})
                         save_config(config)
                 except (requests.RequestException, ValueError) as e:
-                    logger.error(f"Error downloading from URL {url}: {e}")
+                    logger.error(f"Error downloading from URL {redact_url_for_log(url)}: {e}")
             
         elif action == 'delete_screensaver':
             filename = request.form.get('filename')
@@ -1077,6 +1122,7 @@ def admin():
     mqtt_options_controlled = get_mqtt_options_controlled()
     mqtt_externally_controlled = bool(mqtt_env_controlled or mqtt_options_controlled)
 
+    app_version = get_app_version()
     return render_template(
         'admin.html',
         config=config,
@@ -1087,7 +1133,9 @@ def admin():
         mqtt_env_controlled=mqtt_env_controlled,
         mqtt_options_controlled=mqtt_options_controlled,
         mqtt_externally_controlled=mqtt_externally_controlled,
-        current_tab=current_tab
+        current_tab=current_tab,
+        app_version=app_version,
+        release_url=get_release_url(app_version)
     )
 
 if __name__ == "__main__":
