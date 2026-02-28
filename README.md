@@ -6,13 +6,17 @@ A Flask-based web application designed to display and manage weekly schedules in
 
 - 📅 Digital weekly schedule display with multiple plan support
 - 🖼️ Customizable screensaver mode with image rotation
-- 🔄 PDF to image conversion for easy schedule updates
+- 🔘 Configurable screensaver buttons (show plan1/plan2/all, or custom URL) with position and colors
+- 🔄 PDF to image conversion (pages 1 and 2) for easy schedule updates
+- 📆 Calendar integration (iCal/Google Calendar) with per-plan assignments and upcoming events
+- 📄 Display page selection (page 1 or 2) per plan for the "all" view
+- 🗣️ Dashboard language (English, Norwegian Bokmål)
 - ⚙️ Admin panel for system management
-- 🌐 MQTT integration for home automation (optional)
+- 🌐 MQTT integration with Home Assistant discovery (optional)
 - 📱 Responsive design for various display sizes
 - ⏱️ Configurable display duration
-- 🔆 Brightness control (via MQTT)
-- 🎯 URL control for browser integration
+- 🔆 Controls: display on/off, brightness, browser URL, refresh, system restart (via MQTT)
+- ⌨️ Keyboard shortcuts: Arrow Left/Right/Up to switch views
 
 ## Docker
 
@@ -101,25 +105,36 @@ The same Docker image works for both standalone Docker and Home Assistant. MQTT 
 The application uses several configuration files:
 
 - `config.json`: Main configuration file (copy from `example/config.example.json` for first run)
-  - Dashboard duration
-  - Screensaver settings
+  - Dashboard duration and language
+  - Screensaver settings and buttons
   - MQTT configuration
-  - Weekplan settings
+  - Weekplan settings (including display_page)
+  - Calendar URLs and per-plan assignments
 
 Example configuration:
 ```json
 {
   "dashboard_duration": 10,
+  "dashboard_language": "en-GB",
   "screensaver_config": [],
+  "screensaver_buttons": [
+    {"enabled": false, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": false, "color": "#ffffff", "font_color": "auto"},
+    {"enabled": false, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": false, "color": "#ffffff", "font_color": "auto"},
+    {"enabled": false, "label": "Show both weekplans", "action": "all", "use_custom_color": false, "color": "#ffffff", "font_color": "auto"},
+    {"enabled": false, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": false, "color": "#ffffff", "font_color": "auto"}
+  ],
+  "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom"},
   "enable_mqtt": false,
   "mqtt_broker": "homeassistant.local",
   "mqtt_port": 1883,
   "mqtt_user": "",
   "mqtt_pass": "",
   "weekplans": [
-    {"key": "plan1", "name": "Weekplan 1", "icon": "1"},
-    {"key": "plan2", "name": "Weekplan 2", "icon": "2"}
-  ]
+    {"key": "plan1", "name": "Weekplan 1", "icon": "1", "display_page": 1},
+    {"key": "plan2", "name": "Weekplan 2", "icon": "2", "display_page": 1}
+  ],
+  "calendar_urls": [],
+  "calendar_assignments": {}
 }
 ```
 
@@ -132,28 +147,36 @@ The Docker container serves the dashboard and admin interface:
 ## Features in Detail
 
 ### Weekly Plans
-- Upload PDF schedules that are automatically converted to images
+- Upload PDF schedules that are automatically converted to images (first two pages)
 - Support for multiple plans with custom names and icons
+- Per-plan display page selection (page 1 or 2) for the "all" view
 - Timestamp tracking for last updates
 
 ### Screensaver Mode
 - Upload images directly or via URLs
 - Random rotation of active images
 - Enable/disable individual images
+- Configurable buttons (show plan1/plan2/all, or custom URL) with customizable position and colors
+
+### Calendar Integration
+- Multiple calendars with names and colors
+- Assign calendars to specific plans for per-user upcoming events
+- Recurring events supported
 
 ### MQTT Integration
 - Optional integration with home automation systems
-- Control display brightness
-- Monitor system status
+- Home Assistant MQTT Discovery (buttons to show plan1/plan2/all)
+- Control display brightness, on/off, browser URL, refresh
+- System restart and system statistics
 - URL control for browser-based displays
 
 ### Admin Panel
-- System statistics monitoring
+- System statistics monitoring (Controls tab)
 - Configuration management
 - Schedule uploads
-- Screensaver management
+- Screensaver management (images and buttons)
 - MQTT settings
-- Display controls
+- Display controls (brightness, URL, display on/off, restart)
 
 ## Directory Structure
 

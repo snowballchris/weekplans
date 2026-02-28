@@ -4,12 +4,21 @@ Digital weekly schedule display for home automation. Perfect for information rad
 
 ## Features
 
-- Display PDF schedules as images (auto-converted)
-- Multiple weekplan support
+- Display PDF schedules as images (auto-converted, supports two pages)
+- Multiple weekplan support with custom names and icons
 - Screensaver mode with image rotation
-- Calendar integration (iCal/Google Calendar)
-- Optional MQTT integration for Home Assistant control
+- Configurable screensaver buttons (show plan1/plan2/all, or custom URL) with position and colors
+- Calendar integration (iCal/Google Calendar) with per-plan assignments and upcoming events
+- Display page selection (page 1 or 2) per plan for the "all" view
+- Dashboard language (English, Norwegian Bokmål)
+- Optional MQTT integration with Home Assistant discovery
+- Controls tab: display on/off, brightness, browser URL, refresh, system restart
+- Keyboard shortcuts: Arrow Left/Right/Up to switch views
 - Responsive design for various display sizes
+
+## Standalone Docker
+
+You can also run WeekPlans as a standalone Docker container without Home Assistant. See the main [WeekPlans repository](https://github.com/snowballchris/weekplans) for full Docker documentation.
 
 ## Installation
 
