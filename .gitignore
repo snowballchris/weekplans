@@ -6,7 +6,8 @@ __pycache__/
 # macOS
 .DS_Store
 
-# Local state
+# Local state / runtime data
+data/
 dashboard_mode.json
 last_updates.json
 
