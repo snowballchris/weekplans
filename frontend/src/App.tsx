@@ -37,6 +37,8 @@ type ScreensaverButton = {
 type ScreensaverButtonsPosition = {
   horizontal: 'left' | 'center' | 'right'
   vertical: 'top' | 'center' | 'bottom'
+  use_custom_height?: boolean
+  height_px?: number
 }
 
 function isLightColor(hex: string): boolean {
@@ -201,6 +203,10 @@ function App() {
             }}>
               {enabledButtons.map((btn, idx) => {
                 const useCustom = btn.use_custom_color && btn.color
+                const useCustomHeight = screensaverButtonsPosition.use_custom_height && screensaverButtonsPosition.height_px
+                const heightPx = screensaverButtonsPosition.height_px ?? 44
+                const baseFontSize = 16
+                const fontSize = useCustomHeight ? Math.round(baseFontSize * (heightPx / 44)) : baseFontSize
                 return (
                   <button
                     key={idx}
@@ -208,7 +214,8 @@ function App() {
                     onClick={() => handleScreensaverButtonClick(btn)}
                     style={{
                       padding: '0.75rem 1.25rem',
-                      fontSize: '1rem',
+                      ...(useCustomHeight && { minHeight: heightPx, height: heightPx, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
+                      fontSize: `${fontSize}px`,
                       fontWeight: 500,
                       color: (() => {
                         const fc = btn.font_color || 'auto'

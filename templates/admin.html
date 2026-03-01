@@ -269,9 +269,9 @@
                               <form method="POST" action="{{ url_for('admin') }}">
                                   <input type="hidden" name="action" value="set_brightness">
                                   <input type="hidden" name="current_tab" value="controls">
-                                  <label for="brightness" class="form-label">Brightness: <span id="brightnessDisplay">{{ (mqtt_stats['pi/brightness/state']|float * 100)|round }}</span>%</label>
+                                  <label for="brightness" class="form-label">Brightness: <span id="brightnessDisplay">{{ ((mqtt_stats.get('pi/brightness/state', 0.75))|float * 100)|round }}</span>%</label>
                                   <div class="d-flex align-items-center">
-                                      <input type="range" class="form-range me-3" id="brightness" name="brightness" min="0" max="100" value="{{ (mqtt_stats['pi/brightness/state']|float * 100)|round }}">
+                                      <input type="range" class="form-range me-3" id="brightness" name="brightness" min="0" max="100" value="{{ ((mqtt_stats.get('pi/brightness/state', 0.75))|float * 100)|round }}">
                                       <button type="submit" class="btn btn-outline-primary btn-sm">Set</button>
                                   </div>
                               </form>
@@ -391,7 +391,7 @@
                                 <span class="text-muted"><i class="fas fa-crosshairs"></i></span>
                                 <span class="small fw-semibold text-uppercase" style="letter-spacing: 0.05em;">Position</span>
                             </div>
-                            <div class="d-flex flex-wrap gap-4">
+                            <div class="d-flex flex-wrap gap-4 align-items-end">
                                 <div>
                                     <label class="form-label small text-muted mb-1">Horizontal</label>
                                     <div class="btn-group" role="group">
@@ -412,6 +412,16 @@
                                         <label class="btn btn-outline-secondary btn-sm" for="ss_v_center">Center</label>
                                         <input type="radio" class="btn-check" name="screensaver_buttons_vertical" id="ss_v_bottom" value="bottom" {% if pos.get('vertical', 'bottom') == 'bottom' %}checked{% endif %}>
                                         <label class="btn btn-outline-secondary btn-sm" for="ss_v_bottom">Bottom</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="form-label small text-muted mb-1">Button height</label>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input" type="checkbox" name="screensaver_buttons_use_custom_height" id="screensaver_buttons_use_custom_height" {% if pos.get('use_custom_height') %}checked{% endif %} value="1">
+                                            <label class="form-check-label small" for="screensaver_buttons_use_custom_height">Custom</label>
+                                        </div>
+                                        <input type="number" class="form-control form-control-sm" name="screensaver_buttons_height_px" id="screensaver_buttons_height_px" value="{{ pos.get('height_px', 44) }}" min="24" max="200" style="width: 70px;" title="Height in pixels (all buttons)">
                                     </div>
                                 </div>
                             </div>

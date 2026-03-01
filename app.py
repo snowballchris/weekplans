@@ -379,7 +379,7 @@ def load_config():
             {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
             {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
         ],
-        "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom"},
+        "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom", "use_custom_height": False, "height_px": 44},
         "enable_mqtt": False,
         "mqtt_broker": "homeassistant.local",
         "mqtt_port": 1883,
@@ -768,7 +768,15 @@ def api_screensaver_buttons():
         h = "center"
     if v not in ("top", "center", "bottom"):
         v = "bottom"
-    return jsonify({"buttons": buttons[:4], "position": {"horizontal": h, "vertical": v}})
+    use_custom_height = bool(pos.get("use_custom_height", False))
+    try:
+        height_px = max(24, min(200, int(pos.get("height_px", 44))))
+    except (TypeError, ValueError):
+        height_px = 44
+    return jsonify({
+        "buttons": buttons[:4],
+        "position": {"horizontal": h, "vertical": v, "use_custom_height": use_custom_height, "height_px": height_px}
+    })
 
 @app.route("/screensaver_image")
 def screensaver_image():
@@ -1019,7 +1027,12 @@ def admin():
                 h = "center"
             if v not in ("top", "center", "bottom"):
                 v = "bottom"
-            config["screensaver_buttons_position"] = {"horizontal": h, "vertical": v}
+            use_custom_height = "screensaver_buttons_use_custom_height" in request.form
+            try:
+                height_px = max(24, min(200, int(request.form.get("screensaver_buttons_height_px", 44))))
+            except (TypeError, ValueError):
+                height_px = 44
+            config["screensaver_buttons_position"] = {"horizontal": h, "vertical": v, "use_custom_height": use_custom_height, "height_px": height_px}
             save_config(config)
 
         elif action == 'set_mqtt_config':
