@@ -19,6 +19,25 @@
     .status-on { background-color: #198754; }
     .status-off { background-color: #dc3545; }
     .mqtt-controls-disabled { opacity: 0.55; }
+    /* Screensaver buttons section */
+    .ss-buttons-section { background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+    .ss-buttons-section .ss-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+    .ss-buttons-section .ss-body { padding: 1.5rem; }
+    .ss-buttons-section .ss-header .btn-group .btn { font-weight: 500; padding: 0.35rem 0.75rem; }
+    .ss-buttons-section .ss-header .btn-outline-secondary { border-color: #cbd5e1; color: #64748b; }
+    .ss-buttons-section .ss-header .btn-check:checked + .btn-outline-secondary { background: #334155; border-color: #334155; color: #fff; }
+    .ss-btn-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.9rem 1rem; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; margin-bottom: 0.75rem; transition: border-color 0.15s, box-shadow 0.15s; }
+    .ss-btn-row:hover { border-color: #cbd5e1; }
+    .ss-btn-row:last-child { margin-bottom: 0; }
+    .ss-btn-row .ss-btn-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; color: #64748b; flex-shrink: 0; }
+    .ss-btn-row:has(.form-check-input:checked) .ss-btn-icon { background: #22c55e; color: #fff; }
+    .ss-btn-row .ss-label-wrap { flex: 1; min-width: 140px; }
+    .ss-btn-row .ss-label-wrap .form-control { border-radius: 8px; border-color: #e2e8f0; }
+    .ss-btn-row .ss-style-wrap { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .ss-btn-row .form-control-color { width: 32px; height: 32px; padding: 2px; border-radius: 6px; border: 1px solid #e2e8f0; cursor: pointer; }
+    .ss-btn-row .ss-color-group { display: flex; align-items: center; gap: 0.5rem; }
+    .ss-btn-row .ss-color-group .form-control-color { flex-shrink: 0; }
+    .ss-save-btn { padding: 0.5rem 1.25rem; border-radius: 8px; font-weight: 500; }
   </style>
 </head>
 <body>
@@ -361,87 +380,88 @@
                     <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves only the weekplan names and icons."><i class="fas fa-save me-1"></i>Set Weekplan Details</button>
                 </form>
 
-                <hr><h6>Screensaver Buttons</h6>
-                <p class="text-muted mb-3">Optional buttons shown on the screensaver screen. Enable and customize each button. Labels appear on the screensaver when the option is active.</p>
+                <hr><h6 class="mb-2">Screensaver Buttons</h6>
+                <p class="text-muted small mb-3">Optional buttons shown on the screensaver. Enable and customize each one.</p>
                 <form method="POST" action="{{ url_for('admin') }}" class="mb-4">
                     <input type="hidden" name="action" value="set_screensaver_buttons"><input type="hidden" name="current_tab" value="settings">
                     {% set pos = config.get('screensaver_buttons_position', {}) or {} %}
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h6 class="card-title">Button group position</h6>
-                            <div class="row">
-                                <div class="col-md-6 mb-2">
-                                    <label for="screensaver_buttons_horizontal" class="form-label small mb-0">Horizontal</label>
-                                    <select class="form-select form-select-sm" name="screensaver_buttons_horizontal" id="screensaver_buttons_horizontal">
-                                        <option value="left" {% if pos.get('horizontal') == 'left' %}selected{% endif %}>Left</option>
-                                        <option value="center" {% if pos.get('horizontal', 'center') == 'center' %}selected{% endif %}>Center</option>
-                                        <option value="right" {% if pos.get('horizontal') == 'right' %}selected{% endif %}>Right</option>
-                                    </select>
+                    <div class="ss-buttons-section">
+                        <div class="ss-header">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="text-muted"><i class="fas fa-crosshairs"></i></span>
+                                <span class="small fw-semibold text-uppercase" style="letter-spacing: 0.05em;">Position</span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-4">
+                                <div>
+                                    <label class="form-label small text-muted mb-1">Horizontal</label>
+                                    <div class="btn-group" role="group">
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_horizontal" id="ss_h_left" value="left" {% if pos.get('horizontal') == 'left' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_h_left">Left</label>
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_horizontal" id="ss_h_center" value="center" {% if pos.get('horizontal', 'center') == 'center' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_h_center">Center</label>
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_horizontal" id="ss_h_right" value="right" {% if pos.get('horizontal') == 'right' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_h_right">Right</label>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 mb-2">
-                                    <label for="screensaver_buttons_vertical" class="form-label small mb-0">Vertical</label>
-                                    <select class="form-select form-select-sm" name="screensaver_buttons_vertical" id="screensaver_buttons_vertical">
-                                        <option value="top" {% if pos.get('vertical') == 'top' %}selected{% endif %}>Top</option>
-                                        <option value="center" {% if pos.get('vertical') == 'center' %}selected{% endif %}>Center</option>
-                                        <option value="bottom" {% if pos.get('vertical', 'bottom') == 'bottom' %}selected{% endif %}>Bottom</option>
-                                    </select>
+                                <div>
+                                    <label class="form-label small text-muted mb-1">Vertical</label>
+                                    <div class="btn-group" role="group">
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_vertical" id="ss_v_top" value="top" {% if pos.get('vertical') == 'top' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_v_top">Top</label>
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_vertical" id="ss_v_center" value="center" {% if pos.get('vertical') == 'center' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_v_center">Center</label>
+                                        <input type="radio" class="btn-check" name="screensaver_buttons_vertical" id="ss_v_bottom" value="bottom" {% if pos.get('vertical', 'bottom') == 'bottom' %}checked{% endif %}>
+                                        <label class="btn btn-outline-secondary btn-sm" for="ss_v_bottom">Bottom</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    {% set btn_configs = [
-                      ('Show Weekplan 1', 'plan1', false),
-                      ('Show Weekplan 2', 'plan2', false),
-                      ('Show both weekplans', 'all', false),
-                      ('Custom URL', 'url', true)
-                    ] %}
-                    {% set screensaver_btns = config.get('screensaver_buttons', []) %}
-                    {% for i in range(4) %}
-                    {% set btn = screensaver_btns[i] if i < screensaver_btns|length else {} %}
-                    {% set default_label = btn_configs[i][0] %}
-                    {% set is_url = btn_configs[i][2] %}
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <div class="row align-items-center flex-wrap">
-                                <div class="col-auto">
-                                    <div class="form-check form-switch mb-0">
-                                        <input class="form-check-input" type="checkbox" name="screensaver_btn_{{ i }}_enabled" id="screensaver_btn_{{ i }}_enabled" {% if btn.get('enabled') %}checked{% endif %} value="1">
-                                        <label class="form-check-label" for="screensaver_btn_{{ i }}_enabled">Enable</label>
-                                    </div>
+                        <div class="ss-body">
+                            {% set btn_configs = [
+                              ('Show Weekplan 1', 'plan1', false, 'fa-calendar-day'),
+                              ('Show Weekplan 2', 'plan2', false, 'fa-calendar-day'),
+                              ('Show both weekplans', 'all', false, 'fa-calendar-week'),
+                              ('Custom URL', 'url', true, 'fa-link')
+                            ] %}
+                            {% set screensaver_btns = config.get('screensaver_buttons', []) %}
+                            {% for i in range(4) %}
+                            {% set btn = screensaver_btns[i] if i < screensaver_btns|length else {} %}
+                            {% set default_label = btn_configs[i][0] %}
+                            {% set is_url = btn_configs[i][2] %}
+                            {% set btn_icon = btn_configs[i][3] %}
+                            <div class="ss-btn-row">
+                                <div class="form-check form-switch mb-0" style="flex-shrink: 0;">
+                                    <input class="form-check-input" type="checkbox" name="screensaver_btn_{{ i }}_enabled" id="screensaver_btn_{{ i }}_enabled" {% if btn.get('enabled') %}checked{% endif %} value="1">
+                                    <label class="form-check-label visually-hidden" for="screensaver_btn_{{ i }}_enabled">Enable</label>
                                 </div>
-                                <div class="col">
-                                    <label for="screensaver_btn_{{ i }}_label" class="form-label small mb-0">Button label</label>
+                                <div class="ss-btn-icon"><i class="fas {{ btn_icon }}"></i></div>
+                                <div class="ss-label-wrap">
                                     <input type="text" class="form-control form-control-sm" name="screensaver_btn_{{ i }}_label" id="screensaver_btn_{{ i }}_label" value="{{ btn.get('label', default_label) }}" placeholder="{{ default_label }}">
                                 </div>
                                 {% if is_url %}
-                                <div class="col">
-                                    <label for="screensaver_btn_{{ i }}_url" class="form-label small mb-0">URL (opens in browser when pressed)</label>
+                                <div class="ss-label-wrap" style="min-width: 180px;">
                                     <input type="url" class="form-control form-control-sm" name="screensaver_btn_{{ i }}_url" id="screensaver_btn_{{ i }}_url" value="{{ btn.get('url', '') }}" placeholder="https://example.com">
                                 </div>
                                 {% endif %}
-                                <div class="col-auto">
-                                    <div class="form-check form-switch mb-1">
+                                <div class="ss-style-wrap">
+                                    <div class="form-check form-switch mb-0">
                                         <input class="form-check-input" type="checkbox" name="screensaver_btn_{{ i }}_use_custom_color" id="screensaver_btn_{{ i }}_use_custom_color" {% if btn.get('use_custom_color') %}checked{% endif %} value="1">
-                                        <label class="form-check-label" for="screensaver_btn_{{ i }}_use_custom_color">Custom colour</label>
+                                        <label class="form-check-label small text-muted" for="screensaver_btn_{{ i }}_use_custom_color">Custom</label>
                                     </div>
-                                    <div class="d-flex align-items-center gap-1">
+                                    <div class="ss-color-group">
                                         <input type="color" class="form-control form-control-color" name="screensaver_btn_{{ i }}_color" id="screensaver_btn_{{ i }}_color" value="{{ btn.get('color', '#ffffff') }}" title="Button colour">
-                                        <label for="screensaver_btn_{{ i }}_color" class="form-label small mb-0 text-muted">Colour</label>
+                                        <select class="form-select form-select-sm" name="screensaver_btn_{{ i }}_font_color" id="screensaver_btn_{{ i }}_font_color" style="width: auto; min-width: 80px;">
+                                            <option value="auto" {% if btn.get('font_color', 'auto') == 'auto' %}selected{% endif %}>Auto</option>
+                                            <option value="white" {% if btn.get('font_color') == 'white' %}selected{% endif %}>White</option>
+                                            <option value="black" {% if btn.get('font_color') == 'black' %}selected{% endif %}>Black</option>
+                                        </select>
                                     </div>
-                                </div>
-                                <div class="col-auto">
-                                    <label for="screensaver_btn_{{ i }}_font_color" class="form-label small mb-0">Font colour</label>
-                                    <select class="form-select form-select-sm" name="screensaver_btn_{{ i }}_font_color" id="screensaver_btn_{{ i }}_font_color">
-                                        <option value="auto" {% if btn.get('font_color', 'auto') == 'auto' %}selected{% endif %}>Auto</option>
-                                        <option value="white" {% if btn.get('font_color') == 'white' %}selected{% endif %}>White</option>
-                                        <option value="black" {% if btn.get('font_color') == 'black' %}selected{% endif %}>Black</option>
-                                    </select>
                                 </div>
                             </div>
+                            {% endfor %}
+                            <button type="submit" class="btn btn-primary ss-save-btn mt-3" data-bs-toggle="tooltip" title="Saves screensaver button settings."><i class="fas fa-save me-2"></i>Save Screensaver Buttons</button>
                         </div>
                     </div>
-                    {% endfor %}
-                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Saves screensaver button settings."><i class="fas fa-save me-1"></i>Save Screensaver Buttons</button>
                 </form>
 
                 <hr><h6 id="mqtt-config">MQTT Configuration
