@@ -678,7 +678,7 @@
       `;
       refreshBtn.disabled = true;
       
-      fetch('/api/calendar/events')
+      fetch(new URL('api/calendar/events', window.location.href).href)
         .then(response => response.json())
         .then(events => {
           if (events.length === 0) {

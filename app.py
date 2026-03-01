@@ -9,6 +9,7 @@ import requests
 import logging
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
+from werkzeug.middleware.proxy_fix import ProxyFix
 from pdf2image import convert_from_path
 from urllib.parse import urlparse
 from typing import Optional, Dict, List
@@ -486,6 +487,35 @@ app = Flask(__name__, static_folder=STATIC_FOLDER)
 
 # Configure Flask for large file uploads (50MB max)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
+
+class IngressPathFix:
+    """
+    WSGI middleware that sets SCRIPT_NAME from X-Ingress-Path or X-Forwarded-Prefix.
+    Required for Home Assistant ingress and other reverse proxies so url_for() and
+    redirects generate correct URLs (e.g. /api/hassio_ingress/TOKEN/admin).
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        prefix = (
+            environ.get("HTTP_X_INGRESS_PATH")
+            or environ.get("HTTP_X_FORWARDED_PREFIX")
+        )
+        if prefix:
+            prefix = prefix.rstrip("/")
+            if prefix:
+                environ["SCRIPT_NAME"] = prefix
+        return self.app(environ, start_response)
+
+
+# IngressPathFix must run first to set SCRIPT_NAME from X-Ingress-Path (HA).
+# ProxyFix handles X-Forwarded-* for scheme, host, etc.
+app.wsgi_app = IngressPathFix(app.wsgi_app)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 
 @app.before_request
 def refresh_config():
