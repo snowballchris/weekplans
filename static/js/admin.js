@@ -1,4 +1,20 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Slider displays (run first so they work even if PDF block fails) ---
+    const durationSlider = document.getElementById('dashboard_duration');
+    const durationDisplay = document.getElementById('durationDisplay');
+    if (durationSlider && durationDisplay) {
+      durationSlider.addEventListener('input', function() {
+        durationDisplay.textContent = this.value;
+      });
+    }
+    const brightnessSlider = document.getElementById('brightness');
+    const brightnessDisplay = document.getElementById('brightnessDisplay');
+    if (brightnessSlider && brightnessDisplay) {
+      brightnessSlider.addEventListener('input', function() {
+        brightnessDisplay.textContent = this.value + '%';
+      });
+    }
+
     // --- Tab Handling ---
     const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
     tabButtons.forEach(button => {
@@ -134,24 +150,6 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         }
       });
-    }
-  
-    // --- Settings Tab: Duration Slider ---
-    const durationSlider = document.getElementById('dashboard_duration');
-    const durationDisplay = document.getElementById('durationDisplay');
-    if (durationSlider && durationDisplay) {
-      durationSlider.addEventListener('input', function() {
-        durationDisplay.textContent = this.value;
-      });
-    }
-  
-    // --- Controls Tab: Brightness Slider ---
-    const brightnessSlider = document.getElementById('brightness');
-    const brightnessDisplay = document.getElementById('brightnessDisplay');
-    if (brightnessSlider && brightnessDisplay) {
-        brightnessSlider.addEventListener('input', function() {
-            brightnessDisplay.textContent = this.value + '%';
-        });
     }
   
     // --- Controls Tab: Refresh Status ---
