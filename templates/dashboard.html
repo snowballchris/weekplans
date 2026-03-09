@@ -154,7 +154,7 @@
           {% for plan in weekplans %}
           <div class="plan-container">
               <div class="plan-header">
-                  <span class="plan-icon">{{ plan.icon }}</span>
+                  {% if plan.enable_icon|default(true) %}<span class="plan-icon">{{ plan.icon }}</span>{% endif %}
                   <h2 class="plan-title">{{ plan.name }}</h2>
               </div>
               <div class="image-frame">

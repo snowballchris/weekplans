@@ -5,7 +5,9 @@ type Weekplan = {
   key: string
   name: string
   icon: string
+  enable_icon?: boolean
   last_update_iso: string
+  display_page?: number
   img_url: string
   img_url2?: string
   page1_url?: string
@@ -29,6 +31,7 @@ type ScreensaverButton = {
   label: string
   action: 'plan1' | 'plan2' | 'all' | 'url'
   url?: string
+  target_top?: boolean
   use_custom_color?: boolean
   color?: string
   font_color?: 'auto' | 'white' | 'black'
@@ -60,10 +63,63 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
+function ScreensaverButtonsBar({ buttons, position, onButtonClick, isLight, forceDefaultSize }: {
+  buttons: ScreensaverButton[]
+  position: ScreensaverButtonsPosition
+  onButtonClick: (btn: ScreensaverButton) => void
+  isLight: boolean
+  forceDefaultSize?: boolean
+}) {
+  const useCustomHeight = !forceDefaultSize && position.use_custom_height && position.height_px
+  const heightPx = position.height_px ?? 44
+  const baseFontSize = 16
+  const fontSize = useCustomHeight ? Math.round(baseFontSize * (heightPx / 44)) : baseFontSize
+  return (
+    <>
+      {buttons.map((btn, idx) => {
+        const useCustom = btn.use_custom_color && btn.color
+        const fc = btn.font_color || 'auto'
+        const textColor = isLight
+          ? (fc === 'white' ? '#333' : fc === 'black' ? '#333' : '#212529')
+          : (fc === 'white' ? 'white' : fc === 'black' ? '#333' : useCustom ? (isLightColor(btn.color!) ? '#333' : 'white') : 'white')
+        const bg = isLight
+          ? (useCustom ? hexToRgba(btn.color!, 0.15) : 'rgba(0,0,0,0.08)')
+          : (useCustom ? hexToRgba(btn.color!, 0.2) : 'rgba(255,255,255,0.2)')
+        const border = isLight
+          ? (useCustom ? `1px solid ${hexToRgba(btn.color!, 0.4)}` : '1px solid rgba(0,0,0,0.15)')
+          : (useCustom ? `1px solid ${hexToRgba(btn.color!, 0.5)}` : '1px solid rgba(255,255,255,0.5)')
+        return (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => onButtonClick(btn)}
+            style={{
+              padding: '0.75rem 1.25rem',
+              ...(useCustomHeight && { minHeight: heightPx, height: heightPx, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
+              fontSize: `${fontSize}px`,
+              fontWeight: 500,
+              color: textColor,
+              background: bg,
+              border,
+              borderRadius: 8,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            {btn.label}
+          </button>
+        )
+      })}
+    </>
+  )
+}
+
 function useModePolling(intervalMs: number) {
   const [isDashboard, setIsDashboard] = useState(false)
   const [view, setView] = useState<'all' | 'plan1' | 'plan2'>('all')
   const [language, setLanguage] = useState<'en-GB' | 'nb-NO'>('en-GB')
+  const [weekplanLayout, setWeekplanLayout] = useState<'full' | 'simple'>('full')
+  const [showCalendar, setShowCalendar] = useState(false)
   useEffect(() => {
     let timer: number | undefined
     const tick = async () => {
@@ -73,6 +129,8 @@ function useModePolling(intervalMs: number) {
         setIsDashboard(Boolean(data.dashboard))
         if (data.view) setView(data.view)
         if (data.language === 'nb-NO' || data.language === 'en-GB') setLanguage(data.language)
+        if (data.weekplan_layout === 'simple' || data.weekplan_layout === 'full') setWeekplanLayout(data.weekplan_layout)
+        if (typeof data.show_calendar === 'boolean') setShowCalendar(data.show_calendar)
       } catch (e) {
         // ignore
       } finally {
@@ -82,12 +140,12 @@ function useModePolling(intervalMs: number) {
     tick()
     return () => { if (timer) window.clearTimeout(timer) }
   }, [intervalMs])
-  return { isDashboard, view, language }
+  return { isDashboard, view, language, weekplanLayout, showCalendar }
 }
 
 function App() {
   const [weekplans, setWeekplans] = useState<Weekplan[]>([])
-  const { isDashboard, view, language } = useModePolling(1000)
+  const { isDashboard, view, language, weekplanLayout, showCalendar } = useModePolling(1000)
   const [screensaverUrl, setScreensaverUrl] = useState('')
   const [screensaverButtons, setScreensaverButtons] = useState<ScreensaverButton[]>([])
   const [screensaverButtonsPosition, setScreensaverButtonsPosition] = useState<ScreensaverButtonsPosition>({ horizontal: 'center', vertical: 'bottom' })
@@ -160,7 +218,13 @@ function App() {
 
   const handleScreensaverButtonClick = (btn: ScreensaverButton) => {
     if (btn.action === 'url') {
-      if (btn.url) window.location.href = btn.url
+      if (btn.url) {
+        if (btn.target_top) {
+          window.top!.location.href = btn.url
+        } else {
+          window.location.href = btn.url
+        }
+      }
       return
     }
     const form = new FormData()
@@ -173,6 +237,22 @@ function App() {
   }
 
   const enabledButtons = screensaverButtons.filter(b => b.enabled)
+  // In weekplan view: exclude Custom URL, only show plan1/plan2/all buttons
+  const weekplanViewButtons = enabledButtons.filter(b => b.action !== 'url')
+
+  // When in weekplan view, show buttons bar (home button + plan buttons, no Custom URL)
+  const buttonsInWeekplan = isDashboard
+
+  const handleGoHome = () => {
+    fetch('/api/exit_dashboard', { method: 'POST' }).catch(() => {})
+  }
+  const buttonsPosition = buttonsInWeekplan
+    ? { bottom: 0, top: 'auto', left: 0, right: 0 }
+    : screensaverButtonsPosition.vertical === 'top'
+      ? { top: 0, bottom: 'auto', left: 0, right: 0 }
+      : screensaverButtonsPosition.vertical === 'center'
+        ? { top: '50%', bottom: 'auto', left: 0, right: 0, transform: 'translateY(-50%)' }
+        : { bottom: 0, top: 'auto', left: 0, right: 0 }
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: isDashboard ? 'transparent' : 'black' }}>
@@ -184,11 +264,7 @@ function App() {
           {enabledButtons.length > 0 && (
             <div style={{
               position: 'absolute',
-              ...(screensaverButtonsPosition.vertical === 'top' && { top: 0, bottom: 'auto' }),
-              ...(screensaverButtonsPosition.vertical === 'center' && { top: '50%', bottom: 'auto', transform: 'translateY(-50%)' }),
-              ...(screensaverButtonsPosition.vertical === 'bottom' && { bottom: 0, top: 'auto' }),
-              left: 0,
-              right: 0,
+              ...buttonsPosition,
               display: 'flex',
               flexWrap: 'wrap',
               gap: '0.75rem',
@@ -201,71 +277,113 @@ function App() {
                   ? 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.4), transparent)'
                   : 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
             }}>
-              {enabledButtons.map((btn, idx) => {
-                const useCustom = btn.use_custom_color && btn.color
-                const useCustomHeight = screensaverButtonsPosition.use_custom_height && screensaverButtonsPosition.height_px
-                const heightPx = screensaverButtonsPosition.height_px ?? 44
-                const baseFontSize = 16
-                const fontSize = useCustomHeight ? Math.round(baseFontSize * (heightPx / 44)) : baseFontSize
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleScreensaverButtonClick(btn)}
-                    style={{
-                      padding: '0.75rem 1.25rem',
-                      ...(useCustomHeight && { minHeight: heightPx, height: heightPx, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
-                      fontSize: `${fontSize}px`,
-                      fontWeight: 500,
-                      color: (() => {
-                        const fc = btn.font_color || 'auto'
-                        if (fc === 'white') return 'white'
-                        if (fc === 'black') return '#333'
-                        return useCustom ? (isLightColor(btn.color!) ? '#333' : 'white') : 'white'
-                      })(),
-                      background: useCustom ? hexToRgba(btn.color!, 0.2) : 'rgba(255,255,255,0.2)',
-                      border: useCustom ? `1px solid ${hexToRgba(btn.color!, 0.5)}` : '1px solid rgba(255,255,255,0.5)',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      backdropFilter: 'blur(8px)',
-                    }}
-                  >
-                    {btn.label}
-                  </button>
-                )
-              })}
+              <ScreensaverButtonsBar
+                buttons={enabledButtons}
+                position={screensaverButtonsPosition}
+                onButtonClick={handleScreensaverButtonClick}
+                isLight={false}
+              />
             </div>
           )}
         </div>
       )}
+      {buttonsInWeekplan && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          padding: '1.5rem',
+          justifyContent: 'center',
+          alignItems: 'center',
+          background: 'linear-gradient(to top, rgba(248,249,250,0.95), rgba(248,249,250,0.7))',
+          borderTop: '1px solid rgba(0,0,0,0.08)',
+          pointerEvents: 'auto',
+        }}>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="Return to screensaver"
+            style={{
+              padding: '0.75rem 1.25rem',
+              fontSize: '16px',
+              fontWeight: 500,
+              color: '#212529',
+              background: 'rgba(0,0,0,0.08)',
+              border: '1px solid rgba(0,0,0,0.15)',
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '0.5rem',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          </button>
+          <ScreensaverButtonsBar
+            buttons={weekplanViewButtons}
+            position={screensaverButtonsPosition}
+            onButtonClick={handleScreensaverButtonClick}
+            isLight={true}
+            forceDefaultSize={true}
+          />
+        </div>
+      )}
       {isDashboard && view === 'all' && (
-        <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', boxSizing: 'border-box', overflow: 'hidden', color: '#212529' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-            <DateDisplay language={language} />
-            <TimeDisplay language={language} />
-          </div>
-          <div style={{
-            display: 'flex',
-            flexDirection: isPortrait ? 'column' : 'row',
-            gap: '2rem',
-            height: isPortrait ? 'calc(100vh - 10rem)' : 'calc(100vh - 8rem)',
-            alignItems: 'flex-start',
-            overflowY: isPortrait ? 'auto' : 'hidden',
-            paddingRight: isPortrait ? '1rem' : undefined
-          }}>
-            {weekplans.map(wp => (
-              <PlanCard key={wp.key} plan={wp} language={language} />
-            ))}
-          </div>
+        <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', paddingBottom: buttonsInWeekplan ? '6rem' : '2rem', boxSizing: 'border-box', overflow: 'auto', color: '#212529', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {weekplanLayout === 'simple' ? (
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <SimpleLayoutAll weekplans={weekplans} language={language} isPortrait={isPortrait} />
+            </div>
+          ) : (
+            <>
+              <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                <DateDisplay language={language} />
+                <TimeDisplay language={language} />
+              </div>
+              <div style={{
+                display: 'flex',
+                flexDirection: isPortrait ? 'column' : 'row',
+                gap: '2rem',
+                alignItems: 'flex-start',
+                overflowY: 'auto',
+                paddingRight: '1rem',
+                flex: 1,
+                minHeight: 0
+              }}>
+                {weekplans.map(wp => (
+                  <PlanCard key={wp.key} plan={wp} language={language} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
       {isDashboard && view !== 'all' && (
-        <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', boxSizing: 'border-box', overflow: 'hidden', color: '#212529' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-            <DateDisplay language={language} />
-            <TimeDisplay language={language} />
-          </div>
-          <SingleUserTwoPage plans={weekplans} view={view} isPortrait={isPortrait} language={language} />
+        <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', paddingBottom: buttonsInWeekplan ? '6rem' : '2rem', boxSizing: 'border-box', overflow: 'auto', color: '#212529', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {weekplanLayout === 'simple' ? (
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <SimpleLayoutSingle plans={weekplans} view={view} language={language} isPortrait={isPortrait} showCalendar={showCalendar} />
+            </div>
+          ) : (
+            <>
+              <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                <DateDisplay language={language} />
+                <TimeDisplay language={language} />
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                <SingleUserTwoPage plans={weekplans} view={view} isPortrait={isPortrait} language={language} showCalendar={showCalendar} />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -284,7 +402,7 @@ function DateDisplay({ language }: { language: 'en-GB' | 'nb-NO' }) {
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [language])
   return <div style={{ fontSize: '2.5rem', fontWeight: 500 }}>{text}</div>
 }
 
@@ -295,42 +413,71 @@ function TimeDisplay({ language }: { language: 'en-GB' | 'nb-NO' }) {
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [language])
   return <div style={{ fontSize: '3rem', fontWeight: 600, color: '#0d6efd', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas' }}>{text}</div>
 }
 
-function PlanCard({ plan, language }: { plan: Weekplan; language: 'en-GB' | 'nb-NO' }) {
-  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
-  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
+function SimpleLayoutAll({ weekplans }: { weekplans: Weekplan[]; language: 'en-GB' | 'nb-NO'; isPortrait: boolean }) {
+  const [index, setIndex] = useState(0)
+  const plan = weekplans[index]
+  if (!plan || weekplans.length === 0) return null
+  const canPrev = index > 0
+  const canNext = index < weekplans.length - 1
+  const navBtnStyle: React.CSSProperties = {
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    width: 48, height: 48, borderRadius: '50%', border: '2px solid #dee2e6',
+    background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '1.5rem', color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+  }
   return (
-    <div style={{ flex: 1, background: 'white', borderRadius: 12, padding: '1.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-        <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>
+    <div style={{ width: '100%', height: '100%', display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ background: '#f8f9fa', display: 'flex', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)', minHeight: 0, overflow: 'hidden' }}>
+        {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
         <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
       </div>
-      <div style={{ width: '100%', aspectRatio: '1.414 / 1', backgroundColor: '#f0f0f0', border: '1px solid #dee2e6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <img src={plan.img_url} alt={`${plan.name} weekplan`} style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
-      </div>
-      <div style={{ fontSize: '0.875rem', color: '#6c757d', display: 'flex', alignItems: 'center', marginTop: '1rem' }}>
-        <span style={{ marginRight: 8 }}>{lastUpdatedLabel} {lastUpdated}</span>
+      <div style={{ minHeight: 0, minWidth: 0, position: 'relative', overflow: 'auto' }}>
+        <div style={{ minHeight: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem 2rem', boxSizing: 'border-box' }}>
+          <img src={plan.img_url} alt={`${plan.name} weekplan`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'block' }} />
+        </div>
+        {canPrev && (
+          <button type="button" onClick={() => setIndex(i => Math.max(0, i - 1))} style={{ ...navBtnStyle, left: 8 }} aria-label="Previous">
+            ‹
+          </button>
+        )}
+        {canNext && (
+          <button type="button" onClick={() => setIndex(i => Math.min(weekplans.length - 1, i + 1))} style={{ ...navBtnStyle, right: 8 }} aria-label="Next">
+            ›
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-export default App
-
-function SingleUserTwoPage({ plans, view, isPortrait, language }: { plans: Weekplan[]; view: 'plan1' | 'plan2' | 'all'; isPortrait: boolean; language: 'en-GB' | 'nb-NO' }) {
+function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }: { plans: Weekplan[]; view: 'plan1' | 'plan2'; language: 'en-GB' | 'nb-NO'; isPortrait: boolean; showCalendar?: boolean }) {
   const planKey = view === 'plan2' ? 'plan2' : 'plan1'
   const plan = plans.find(p => p.key === planKey)
   if (!plan) return null
-  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
-  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
+  const pages = [
+    plan.page1_url || plan.img_url,
+    (plan.page2_url || plan.img_url2)
+  ].filter(Boolean) as string[]
+  const [pageIndex, setPageIndex] = useState(0)
+  const imgUrl = pages[pageIndex] || plan.img_url
+  const canPrev = pageIndex > 0
+  const canNext = pageIndex < pages.length - 1
+  const navBtnStyle: React.CSSProperties = {
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    width: 48, height: 48, borderRadius: '50%', border: '2px solid #dee2e6',
+    background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '1.5rem', color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+  }
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
 
   useEffect(() => {
+    if (!showCalendar) return
     let cancelled = false
     const load = async () => {
       setLoading(true)
@@ -349,12 +496,153 @@ function SingleUserTwoPage({ plans, view, isPortrait, language }: { plans: Weekp
     load()
     const id = window.setInterval(load, 60_000)
     return () => { cancelled = true; window.clearInterval(id) }
-  }, [planKey])
+  }, [planKey, showCalendar])
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
+      <div style={{ flexShrink: 0, background: '#f8f9fa', display: 'flex', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+        {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative', overflow: 'auto' }}>
+        <div style={{ minHeight: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem 2rem', boxSizing: 'border-box' }}>
+          <img src={imgUrl} alt={`${plan.name} page ${pageIndex + 1}`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'block' }} />
+        </div>
+        {canPrev && (
+          <button type="button" onClick={() => setPageIndex(i => Math.max(0, i - 1))} style={{ ...navBtnStyle, left: 8 }} aria-label="Previous page">
+            ‹
+          </button>
+        )}
+        {canNext && (
+          <button type="button" onClick={() => setPageIndex(i => Math.min(pages.length - 1, i + 1))} style={{ ...navBtnStyle, right: 8 }} aria-label="Next page">
+            ›
+          </button>
+        )}
+      </div>
+      {showCalendar && (
+        <div style={{ flexShrink: 0, marginTop: 10, paddingBottom: 10 }}>
+          <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>{language === 'nb-NO' ? 'Kommende hendelser' : 'Upcoming events'}</h3>
+          <div style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 8, maxHeight: isPortrait ? 300 : 220, overflowY: 'auto' }}>
+            {loading && (
+              <div style={{ padding: '0.75rem', color: '#6c757d' }}>{language === 'nb-NO' ? 'Laster…' : 'Loading…'}</div>
+            )}
+            {!loading && error && (
+              <div style={{ padding: '0.75rem', color: '#dc3545' }}>{error}</div>
+            )}
+            {!loading && !error && events.length === 0 && (
+              <div style={{ padding: '0.75rem', color: '#6c757d' }}>
+                {language === 'nb-NO' ? 'Ingen hendelser de neste dagene' : 'No events the next few days'}
+              </div>
+            )}
+            {!loading && !error && events.length > 0 && (
+              <div>
+                {events.map((ev, idx) => {
+                  const color = ev.calendar_color || '#3788d8'
+                  const d = new Date(ev.start_datetime)
+                  const isToday = d.toDateString() === new Date().toDateString()
+                  const dateOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }
+                  let dateLabel = d.toLocaleDateString(language, dateOpts)
+                  dateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)
+                  const todayWord = language === 'nb-NO' ? 'I dag' : 'Today'
+                  const atWord = language === 'nb-NO' ? 'kl.' : 'at'
+                  const timeStr = d.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit', hour12: false })
+                  const dateDisplay = isToday ? todayWord : dateLabel
+                  const timeText = ev.is_all_day ? dateDisplay : `${dateDisplay} ${atWord} ${timeStr}`
+                  const locationShort = (ev.location || '').split(',')[0] || ''
+                  return (
+                    <div key={idx} style={{ padding: '0.5rem 0.75rem', borderTop: idx === 0 ? undefined : '1px solid #eee', borderLeft: `4px solid ${color}`, background: isToday ? 'rgba(13,110,253,0.04)' : undefined }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 22, lineHeight: 1.0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {ev.summary}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, paddingLeft: 8 }}>
+                            <div style={{ fontSize: 12, color: '#6c757d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {timeText}
+                            </div>
+                            {locationShort && (
+                              <div style={{ fontSize: 12, color: '#6c757d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {locationShort}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {ev.calendar_name && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6c757d', marginLeft: 12 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 10, background: color }} />
+                            <span>{ev.calendar_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlanCard({ plan, language }: { plan: Weekplan; language: 'en-GB' | 'nb-NO' }) {
+  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
+  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
+  return (
+    <div style={{ flex: 1, background: 'white', borderRadius: 12, padding: '1.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+        {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+      </div>
+      <div style={{ width: '100%', aspectRatio: '1.414 / 1', backgroundColor: '#f0f0f0', border: '1px solid #dee2e6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <img src={plan.img_url} alt={`${plan.name} weekplan`} style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
+      </div>
+      <div style={{ fontSize: '0.875rem', color: '#6c757d', display: 'flex', alignItems: 'center', marginTop: '1rem' }}>
+        <span style={{ marginRight: 8 }}>{lastUpdatedLabel} {lastUpdated}</span>
+      </div>
+    </div>
+  )
+}
+
+export default App
+
+function SingleUserTwoPage({ plans, view, isPortrait, language, showCalendar }: { plans: Weekplan[]; view: 'plan1' | 'plan2' | 'all'; isPortrait: boolean; language: 'en-GB' | 'nb-NO'; showCalendar?: boolean }) {
+  const planKey = view === 'plan2' ? 'plan2' : 'plan1'
+  const plan = plans.find(p => p.key === planKey)
+  if (!plan) return null
+  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
+  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+
+  useEffect(() => {
+    if (!showCalendar) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const res = await fetch(`/api/calendar/events_for/${planKey}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        if (!cancelled) setEvents(Array.isArray(data) ? data : [])
+      } catch (e) {
+        if (!cancelled) setError('Failed to load events')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    const id = window.setInterval(load, 60_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+  }, [planKey, showCalendar])
   return (
     <div style={{ width: '100%', height: isPortrait ? 'calc(100vh - 10rem)' : 'calc(100vh - 8rem)', overflowY: isPortrait ? 'auto' : 'hidden', paddingRight: isPortrait ? '1rem' : undefined, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>
+          {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
         </div>
         <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>{lastUpdatedLabel} {lastUpdated}</div>
@@ -376,6 +664,7 @@ function SingleUserTwoPage({ plans, view, isPortrait, language }: { plans: Weekp
         </div>
       </div>
       {/* Assigned calendar events at the bottom */}
+      {showCalendar && (
       <div style={{ marginTop: 10 }}>
         <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>{language === 'nb-NO' ? 'Kommende hendelser' : 'Upcoming events'}</h3>
         <div style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 8, maxHeight: isPortrait ? 300 : 220, overflowY: 'auto' }}>
@@ -437,6 +726,7 @@ function SingleUserTwoPage({ plans, view, isPortrait, language }: { plans: Weekp
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }

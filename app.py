@@ -377,7 +377,7 @@ def load_config():
             {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
             {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
             {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
-            {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+            {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "target_top": False, "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
         ],
         "screensaver_buttons_position": {"horizontal": "center", "vertical": "bottom", "use_custom_height": False, "height_px": 44},
         "enable_mqtt": False,
@@ -386,11 +386,13 @@ def load_config():
         "mqtt_user": "",
         "mqtt_pass": "",
         "weekplans": [
-            {"key": "plan1", "name": "Weekplan 1", "icon": "1"},
-            {"key": "plan2", "name": "Weekplan 2", "icon": "2"}
+            {"key": "plan1", "name": "Weekplan 1", "icon": "1", "enable_icon": True},
+            {"key": "plan2", "name": "Weekplan 2", "icon": "2", "enable_icon": True}
         ],
         "calendar_urls": [],
         "calendar_assignments": {},
+        "enable_calendar": True,
+        "weekplan_layout": "full",
         "dashboard_language": "en-GB"
     }
     for key, value in defaults.items():
@@ -697,12 +699,14 @@ def root():
             'key': key,
             'name': plan.get('name', key),
             'icon': plan.get('icon', ''),
+            'enable_icon': plan.get('enable_icon', True),
             'img_url': selected_img,
             'last_update': update_str
         })
         user_views[key] = {
             'name': plan.get('name', key),
             'icon': plan.get('icon', ''),
+            'enable_icon': plan.get('enable_icon', True),
             'img_page1_url': page1_url,
             'img_page2_url': page2_url
         }
@@ -722,16 +726,28 @@ def root():
         user_views=user_views
     )
 
+@app.route("/api/exit_dashboard", methods=["POST"])
+def api_exit_dashboard():
+    """Clear forced dashboard mode and return to screensaver."""
+    set_forced_dashboard_until(None)
+    return jsonify({"ok": True})
+
 @app.route("/mode")
 def mode():
     """API endpoint to check if the dashboard should be displayed."""
     until = get_forced_dashboard_until()
     mode_active = until is not None and datetime.now() < until
     view = get_forced_dashboard_view("all") if mode_active else "all"
+    enable_calendar = config.get("enable_calendar", True)
+    has_calendars = len(config.get("calendar_urls", [])) > 0
+    show_calendar = enable_calendar and has_calendars
     return jsonify({
         "dashboard": mode_active,
         "view": view,
-        "language": config.get("dashboard_language", "en-GB")
+        "language": config.get("dashboard_language", "en-GB"),
+        "weekplan_layout": config.get("weekplan_layout", "full"),
+        "enable_calendar": enable_calendar,
+        "show_calendar": show_calendar
     })
 
 @app.route("/api/screensaver_buttons")
@@ -742,7 +758,7 @@ def api_screensaver_buttons():
         {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
         {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
         {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
-        {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+        {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "target_top": False, "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
     ]
     for i, d in enumerate(defaults):
         if i >= len(buttons):
@@ -752,7 +768,7 @@ def api_screensaver_buttons():
             fc = b.get("font_color", "auto")
             if fc not in ("auto", "white", "black"):
                 fc = "auto"
-            buttons[i] = {
+            btn = {
                 "enabled": bool(b.get("enabled", False)),
                 "label": str(b.get("label", d["label"])),
                 "action": b.get("action", d["action"]),
@@ -761,6 +777,9 @@ def api_screensaver_buttons():
                 "color": str(b.get("color", "#ffffff")) if b.get("color") else "#ffffff",
                 "font_color": fc,
             }
+            if b.get("action") == "url":
+                btn["target_top"] = bool(b.get("target_top", False))
+            buttons[i] = btn
     pos = config.get("screensaver_buttons_position", {}) or {}
     h = pos.get("horizontal", "center")
     v = pos.get("vertical", "bottom")
@@ -807,7 +826,9 @@ def api_weekplans():
             "key": key,
             "name": plan.get('name', key),
             "icon": plan.get('icon', ''),
+            "enable_icon": plan.get('enable_icon', True),
             "last_update_iso": dt.isoformat() if dt else "",
+            "display_page": display_page,
             "img_url": img_url,
             "img_url2": page2_url,
             "page1_url": page1_url,
@@ -818,6 +839,8 @@ def api_weekplans():
 @app.route("/api/calendar/events", methods=["GET"])
 def api_calendar_events():
     """Return calendar events from all configured URLs for the next 2 weeks."""
+    if not config.get("enable_calendar", True):
+        return jsonify([])
     all_events = []
     calendar_urls = config.get("calendar_urls", [])
     
@@ -845,6 +868,8 @@ def api_calendar_events():
 @app.route("/api/calendar/events_for/<plan_key>", methods=["GET"])
 def api_calendar_events_for(plan_key: str):
     """Return calendar events assigned to a specific plan (user) for today + next 3 days."""
+    if not config.get("enable_calendar", True):
+        return jsonify([])
     assignments_map = config.get("calendar_assignments", {}) or {}
     assigned_ids = set(assignments_map.get(plan_key, []))
     all_events: List[Dict] = []
@@ -973,7 +998,7 @@ def admin():
             set_forced_dashboard_until(datetime.now() + timedelta(seconds=duration), view=view)
             
         elif action == 'set_display_pages':
-            # Save which page to show in "All" view per plan
+            # Save which page to show in "All" view per plan (priority page)
             for plan in config.get('weekplans', []):
                 key = plan['key']
                 val = request.form.get(f'display_page_{key}', str(plan.get('display_page', 1)))
@@ -983,6 +1008,12 @@ def admin():
                 except ValueError:
                     plan['display_page'] = 1
             save_config(config)
+
+        elif action == 'set_weekplan_layout':
+            layout = request.form.get('weekplan_layout', 'full')
+            if layout in ('full', 'simple'):
+                config['weekplan_layout'] = layout
+                save_config(config)
             
         elif action == 'set_duration':
             config['dashboard_duration'] = int(request.form.get('dashboard_duration', 10))
@@ -996,6 +1027,7 @@ def admin():
             for plan in config.get('weekplans', []):
                 plan['name'] = request.form.get(f"name_{plan['key']}", plan['name'])
                 plan['icon'] = request.form.get(f"icon_{plan['key']}", plan['icon'])
+                plan['enable_icon'] = f"enable_icon_{plan['key']}" in request.form
             save_config(config)
 
         elif action == 'set_screensaver_buttons':
@@ -1003,7 +1035,7 @@ def admin():
                 {"enabled": False, "label": "Show Weekplan 1", "action": "plan1", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
                 {"enabled": False, "label": "Show Weekplan 2", "action": "plan2", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
                 {"enabled": False, "label": "Show both weekplans", "action": "all", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
-                {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
+                {"enabled": False, "label": "Custom URL", "action": "url", "url": "", "target_top": False, "use_custom_color": False, "color": "#ffffff", "font_color": "auto"},
             ]
             buttons = []
             for i, d in enumerate(defaults):
@@ -1019,6 +1051,7 @@ def admin():
                 btn = {"enabled": enabled, "label": label, "action": action, "use_custom_color": use_custom_color, "color": color, "font_color": font_color}
                 if action == "url":
                     btn["url"] = url
+                    btn["target_top"] = f"screensaver_btn_{i}_target_top" in request.form
                 buttons.append(btn)
             config["screensaver_buttons"] = buttons
             h = request.form.get("screensaver_buttons_horizontal", "center")
@@ -1051,6 +1084,10 @@ def admin():
                 config['mqtt_pass'] = request.form.get('mqtt_pass', '')
             save_config(config)
             
+        elif action == 'set_calendar_enabled':
+            config['enable_calendar'] = 'enable_calendar' in request.form
+            save_config(config)
+
         elif action == 'set_calendar_assignments':
             # For each plan, read selected calendar IDs
             assignments: Dict[str, List[str]] = {}
