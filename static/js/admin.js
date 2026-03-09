@@ -14,6 +14,22 @@ document.addEventListener('DOMContentLoaded', function() {
         brightnessDisplay.textContent = this.value + '%';
       });
     }
+    const navSizeSlider = document.getElementById('simple_layout_nav_button_size_slider');
+    const navSizeInput = document.getElementById('simple_layout_nav_button_size');
+    const navSizeDisplay = document.getElementById('simpleLayoutNavSizeDisplay');
+    if (navSizeSlider && navSizeInput && navSizeDisplay) {
+      function clampNavSize(v) { return Math.max(24, Math.min(96, parseInt(v, 10) || 48)); }
+      navSizeSlider.addEventListener('input', function() {
+        const v = clampNavSize(this.value);
+        navSizeInput.value = v;
+        navSizeDisplay.textContent = v;
+      });
+      navSizeInput.addEventListener('input', function() {
+        const v = clampNavSize(this.value);
+        navSizeSlider.value = v;
+        navSizeDisplay.textContent = v;
+      });
+    }
 
     // --- Tab Handling ---
     const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');

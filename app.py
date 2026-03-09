@@ -393,6 +393,7 @@ def load_config():
         "calendar_assignments": {},
         "enable_calendar": True,
         "weekplan_layout": "full",
+        "simple_layout_nav_button_size": 48,
         "dashboard_language": "en-GB"
     }
     for key, value in defaults.items():
@@ -451,6 +452,25 @@ def save_last_updates(updates_data):
     with open(UPDATE_FILE, 'w') as f:
         json.dump(data_to_save, f, indent=2)
 
+
+def get_display_last_update(key: str) -> Optional[datetime]:
+    """Return last update datetime for a plan: from last_updates or file mtime fallback."""
+    dt = last_updates.get(key)
+    if dt is not None:
+        return dt
+    # Fallback: use max mtime of page1 and page2 image files
+    latest_ts: Optional[float] = None
+    for suffix in ("-ukeplan.png", "-ukeplan-2.png"):
+        path = os.path.join(STATIC_IMAGE_FOLDER, f"{key}{suffix}")
+        if os.path.isfile(path):
+            try:
+                ts = os.path.getmtime(path)
+                latest_ts = ts if latest_ts is None else max(latest_ts, ts)
+            except OSError:
+                pass
+    return datetime.fromtimestamp(latest_ts) if latest_ts is not None else None
+
+
 last_updates = load_last_updates()
 
 # --- Dashboard Mode State ---
@@ -486,6 +506,17 @@ def get_forced_dashboard_view(default_view: str = "all") -> str:
         return default_view
 
 app = Flask(__name__, static_folder=STATIC_FOLDER)
+
+
+def format_last_update_header(dt: Optional[datetime]) -> str:
+    """Format datetime like the dashboard header: 'mandag 9. mars, 17:45:39'."""
+    if dt is None:
+        return "—"
+    s = f"{dt.strftime('%A')} {dt.day}. {dt.strftime('%B')}, {dt.strftime('%H:%M:%S')}"
+    return s[0].upper() + s[1:] if s else "—"
+
+
+app.jinja_env.filters["format_last_update"] = lambda dt: format_last_update_header(dt) if dt else "—"
 
 # Configure Flask for large file uploads (50MB max)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
@@ -676,9 +707,13 @@ def root():
     """Renders the main dashboard page."""
     now = datetime.now()
     try:
-        locale.setlocale(locale.LC_TIME, "en_GB.UTF-8")
+        loc = "nb_NO.UTF-8" if config.get("dashboard_language") == "nb-NO" else "en_GB.UTF-8"
+        locale.setlocale(locale.LC_TIME, loc)
     except locale.Error:
-        locale.setlocale(locale.LC_TIME, "")
+        try:
+            locale.setlocale(locale.LC_TIME, "")
+        except locale.Error:
+            pass
 
     date_str = now.strftime("%A %-d %B").capitalize()
     time_str = now.strftime("%H:%M:%S")
@@ -687,8 +722,8 @@ def root():
     user_views = {}
     for plan in config.get("weekplans", []):
         key = plan['key']
-        dt = last_updates.get(key)
-        update_str = dt.strftime("%-d %B %Y, at %H:%M") if dt else "—"
+        dt = get_display_last_update(key)
+        update_str = format_last_update_header(dt) if dt else "—"
         ts = int(dt.timestamp()) if dt else 0
         page1_url = url_for('static', filename=f'images/{key}-ukeplan.png') + f'?v={ts}'
         page2_path = os.path.join(STATIC_IMAGE_FOLDER, f"{key}-ukeplan-2.png")
@@ -746,6 +781,7 @@ def mode():
         "view": view,
         "language": config.get("dashboard_language", "en-GB"),
         "weekplan_layout": config.get("weekplan_layout", "full"),
+        "simple_layout_nav_button_size": max(24, min(96, int(config.get("simple_layout_nav_button_size", 48)))),
         "enable_calendar": enable_calendar,
         "show_calendar": show_calendar
     })
@@ -815,7 +851,7 @@ def api_weekplans():
     result = []
     for plan in config.get("weekplans", []):
         key = plan['key']
-        dt = last_updates.get(key)
+        dt = get_display_last_update(key)
         ts = int(dt.timestamp()) if dt else 0
         page1_url = url_for('static', filename=f'images/{key}-ukeplan.png') + f'?v={ts}'
         img2_path = os.path.join(STATIC_IMAGE_FOLDER, f"{key}-ukeplan-2.png")
@@ -1013,7 +1049,12 @@ def admin():
             layout = request.form.get('weekplan_layout', 'full')
             if layout in ('full', 'simple'):
                 config['weekplan_layout'] = layout
-                save_config(config)
+            try:
+                size = max(24, min(96, int(request.form.get('simple_layout_nav_button_size', 48))))
+                config['simple_layout_nav_button_size'] = size
+            except (ValueError, TypeError):
+                pass
+            save_config(config)
             
         elif action == 'set_duration':
             config['dashboard_duration'] = int(request.form.get('dashboard_duration', 10))
@@ -1202,11 +1243,24 @@ def admin():
     mqtt_options_controlled = get_mqtt_options_controlled()
     mqtt_externally_controlled = bool(mqtt_env_controlled or mqtt_options_controlled)
 
+    # Set locale for date formatting (match dashboard language)
+    try:
+        loc = "nb_NO.UTF-8" if config.get("dashboard_language") == "nb-NO" else "en_GB.UTF-8"
+        locale.setlocale(locale.LC_TIME, loc)
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_TIME, "")
+        except locale.Error:
+            pass
+
+    # Build display_last_updates with file mtime fallback for plans missing in last_updates
+    display_last_updates = {p['key']: get_display_last_update(p['key']) for p in config.get('weekplans', [])}
+
     app_version = get_app_version()
     return render_template(
         'admin.html',
         config=config,
-        last_updates=last_updates,
+        last_updates=display_last_updates,
         system_stats=system_stats,
         mqtt_stats=mqtt_stats,
         mqtt_connected=mqtt_connected,

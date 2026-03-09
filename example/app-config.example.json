@@ -68,5 +68,6 @@
   "calendar_urls": [],
   "calendar_assignments": {},
   "enable_calendar": true,
-  "weekplan_layout": "full"
+  "weekplan_layout": "full",
+  "simple_layout_nav_button_size": 48
 }

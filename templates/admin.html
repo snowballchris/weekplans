@@ -38,6 +38,8 @@
     .ss-btn-row .ss-color-group { display: flex; align-items: center; gap: 0.5rem; }
     .ss-btn-row .ss-color-group .form-control-color { flex-shrink: 0; }
     .ss-save-btn { padding: 0.5rem 1.25rem; border-radius: 8px; font-weight: 500; }
+    .simple-layout-nav-size { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 8px; padding: 0.5rem 0.75rem !important; }
+    .simple-layout-nav-size .form-range::-webkit-slider-thumb { width: 14px; height: 14px; }
   </style>
 </head>
 <body>
@@ -146,7 +148,7 @@
                       <label class="form-check-label" for="disp2_{{ plan.key }}" data-bs-toggle="tooltip" title="This page will be prioritised in weekplan views">Mark page 2 as priority</label>
                     </div>
                   </div>
-                  <p class="text-muted small">Last updated: {{ last_updates.get(plan.key).strftime("%-d %B %Y, %H:%M") if last_updates.get(plan.key) else 'Never' }}</p>
+                  <p class="text-muted small">Last updated: {{ last_updates.get(plan.key) | format_last_update }}</p>
                 </div>
               </div>
               {% endfor %}
@@ -191,6 +193,13 @@
                       <span class="position-absolute end-0 top-50 translate-middle-y me-1">›</span>
                       <div class="text-center text-dark mb-1">1 Weekplan 1</div>
                       <div class="border bg-white rounded p-2 mx-3" style="min-height: 50px;">Prioritised page</div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top border-1 border-light d-flex justify-content-end align-items-center gap-2 simple-layout-nav-size" id="simpleLayoutNavSizeRow" onclick="event.stopPropagation()">
+                      <span class="small text-muted" style="font-size: 0.75rem;">Button size</span>
+                      <input type="range" class="form-range flex-grow-1" id="simple_layout_nav_button_size_slider" name="simple_layout_nav_button_size_slider" min="24" max="96" value="{{ config.get('simple_layout_nav_button_size', 48) }}" style="max-width: 90px;">
+                      <input type="number" class="form-control form-control-sm" name="simple_layout_nav_button_size" id="simple_layout_nav_button_size" value="{{ config.get('simple_layout_nav_button_size', 48) }}" min="24" max="96" style="width: 48px; padding: 0.2rem 0.3rem; font-size: 0.8rem; text-align: center; border-radius: 6px;" title="Size in pixels">
+                      <span class="small fw-medium text-dark" id="simpleLayoutNavSizeDisplay" style="font-variant-numeric: tabular-nums; min-width: 1.5rem;">{{ config.get('simple_layout_nav_button_size', 48) }}</span>
+                      <span class="small text-muted">px</span>
                     </div>
                   </label>
                 </div>

@@ -54,6 +54,18 @@ function isLightColor(hex: string): boolean {
   return luminance > 0.5
 }
 
+function formatLastUpdated(iso: string | undefined, lang: 'en-GB' | 'nb-NO'): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  const dateOpts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }
+  const datePart = d.toLocaleDateString(lang, dateOpts)
+  const timeOpts: Intl.DateTimeFormatOptions = { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }
+  const timePart = d.toLocaleTimeString(lang, timeOpts)
+  const s = `${datePart}, ${timePart}`
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i)
   if (!m) return `rgba(255,255,255,${alpha})`
@@ -72,8 +84,11 @@ function ScreensaverButtonsBar({ buttons, position, onButtonClick, isLight, forc
 }) {
   const useCustomHeight = !forceDefaultSize && position.use_custom_height && position.height_px
   const heightPx = position.height_px ?? 44
-  const baseFontSize = 16
-  const fontSize = useCustomHeight ? Math.round(baseFontSize * (heightPx / 44)) : baseFontSize
+  // Uniform padding: 12% of height (min 2px) on all sides; font fills remaining space
+  const paddingPx = useCustomHeight ? Math.max(2, Math.round(heightPx * 0.12)) : 12
+  const fontSize = useCustomHeight ? Math.round(Math.max(12, heightPx - 2 * paddingPx)) : 16
+  const borderWidth = useCustomHeight ? Math.max(1, Math.round(heightPx / 44)) : 1
+  const borderRadius = useCustomHeight ? Math.round(8 * (heightPx / 44)) : 8
   return (
     <>
       {buttons.map((btn, idx) => {
@@ -85,23 +100,23 @@ function ScreensaverButtonsBar({ buttons, position, onButtonClick, isLight, forc
         const bg = isLight
           ? (useCustom ? hexToRgba(btn.color!, 0.15) : 'rgba(0,0,0,0.08)')
           : (useCustom ? hexToRgba(btn.color!, 0.2) : 'rgba(255,255,255,0.2)')
-        const border = isLight
-          ? (useCustom ? `1px solid ${hexToRgba(btn.color!, 0.4)}` : '1px solid rgba(0,0,0,0.15)')
-          : (useCustom ? `1px solid ${hexToRgba(btn.color!, 0.5)}` : '1px solid rgba(255,255,255,0.5)')
+        const borderColor = isLight
+          ? (useCustom ? hexToRgba(btn.color!, 0.4) : 'rgba(0,0,0,0.15)')
+          : (useCustom ? hexToRgba(btn.color!, 0.5) : 'rgba(255,255,255,0.5)')
         return (
           <button
             key={idx}
             type="button"
             onClick={() => onButtonClick(btn)}
             style={{
-              padding: '0.75rem 1.25rem',
-              ...(useCustomHeight && { minHeight: heightPx, height: heightPx, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
+              padding: useCustomHeight ? `${paddingPx}px` : '0.75rem 1.25rem',
+              ...(useCustomHeight && { minHeight: heightPx, height: heightPx, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }),
               fontSize: `${fontSize}px`,
               fontWeight: 500,
               color: textColor,
               background: bg,
-              border,
-              borderRadius: 8,
+              border: `${borderWidth}px solid ${borderColor}`,
+              borderRadius,
               cursor: 'pointer',
               backdropFilter: 'blur(8px)',
             }}
@@ -120,6 +135,7 @@ function useModePolling(intervalMs: number) {
   const [language, setLanguage] = useState<'en-GB' | 'nb-NO'>('en-GB')
   const [weekplanLayout, setWeekplanLayout] = useState<'full' | 'simple'>('full')
   const [showCalendar, setShowCalendar] = useState(false)
+  const [simpleLayoutNavButtonSize, setSimpleLayoutNavButtonSize] = useState(48)
   useEffect(() => {
     let timer: number | undefined
     const tick = async () => {
@@ -131,6 +147,8 @@ function useModePolling(intervalMs: number) {
         if (data.language === 'nb-NO' || data.language === 'en-GB') setLanguage(data.language)
         if (data.weekplan_layout === 'simple' || data.weekplan_layout === 'full') setWeekplanLayout(data.weekplan_layout)
         if (typeof data.show_calendar === 'boolean') setShowCalendar(data.show_calendar)
+        const size = data.simple_layout_nav_button_size
+        if (typeof size === 'number' && size >= 24 && size <= 96) setSimpleLayoutNavButtonSize(size)
       } catch (e) {
         // ignore
       } finally {
@@ -140,12 +158,12 @@ function useModePolling(intervalMs: number) {
     tick()
     return () => { if (timer) window.clearTimeout(timer) }
   }, [intervalMs])
-  return { isDashboard, view, language, weekplanLayout, showCalendar }
+  return { isDashboard, view, language, weekplanLayout, showCalendar, simpleLayoutNavButtonSize }
 }
 
 function App() {
   const [weekplans, setWeekplans] = useState<Weekplan[]>([])
-  const { isDashboard, view, language, weekplanLayout, showCalendar } = useModePolling(1000)
+  const { isDashboard, view, language, weekplanLayout, showCalendar, simpleLayoutNavButtonSize } = useModePolling(1000)
   const [screensaverUrl, setScreensaverUrl] = useState('')
   const [screensaverButtons, setScreensaverButtons] = useState<ScreensaverButton[]>([])
   const [screensaverButtonsPosition, setScreensaverButtonsPosition] = useState<ScreensaverButtonsPosition>({ horizontal: 'center', vertical: 'bottom' })
@@ -341,7 +359,7 @@ function App() {
         <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', paddingBottom: buttonsInWeekplan ? '6rem' : '2rem', boxSizing: 'border-box', overflow: 'auto', color: '#212529', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {weekplanLayout === 'simple' ? (
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <SimpleLayoutAll weekplans={weekplans} language={language} isPortrait={isPortrait} />
+              <SimpleLayoutAll weekplans={weekplans} language={language} isPortrait={isPortrait} navButtonSize={simpleLayoutNavButtonSize} />
             </div>
           ) : (
             <>
@@ -371,7 +389,7 @@ function App() {
         <div style={{ position: 'absolute', inset: 0, background: '#f8f9fa', padding: '2rem', paddingBottom: buttonsInWeekplan ? '6rem' : '2rem', boxSizing: 'border-box', overflow: 'auto', color: '#212529', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {weekplanLayout === 'simple' ? (
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <SimpleLayoutSingle plans={weekplans} view={view} language={language} isPortrait={isPortrait} showCalendar={showCalendar} />
+              <SimpleLayoutSingle plans={weekplans} view={view} language={language} isPortrait={isPortrait} showCalendar={showCalendar} navButtonSize={simpleLayoutNavButtonSize} />
             </div>
           ) : (
             <>
@@ -417,23 +435,39 @@ function TimeDisplay({ language }: { language: 'en-GB' | 'nb-NO' }) {
   return <div style={{ fontSize: '3rem', fontWeight: 600, color: '#0d6efd', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas' }}>{text}</div>
 }
 
-function SimpleLayoutAll({ weekplans }: { weekplans: Weekplan[]; language: 'en-GB' | 'nb-NO'; isPortrait: boolean }) {
+function SimpleLayoutAll({ weekplans, language, navButtonSize = 48 }: { weekplans: Weekplan[]; language: 'en-GB' | 'nb-NO'; isPortrait: boolean; navButtonSize?: number }) {
   const [index, setIndex] = useState(0)
   const plan = weekplans[index]
   if (!plan || weekplans.length === 0) return null
   const canPrev = index > 0
   const canNext = index < weekplans.length - 1
+  const size = Math.max(24, Math.min(96, navButtonSize))
+  const iconSize = Math.round(size * 0.72)
   const navBtnStyle: React.CSSProperties = {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    width: 48, height: 48, borderRadius: '50%', border: '2px solid #dee2e6',
+    width: size, height: size, borderRadius: '50%', border: `${Math.max(1, Math.round(size / 24))}px solid #dee2e6`,
     background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '1.5rem', color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+    padding: 0, lineHeight: 0, color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   }
+  const ChevronLeft = () => (
+    <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  )
+  const ChevronRight = () => (
+    <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  )
+  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
   return (
     <div style={{ width: '100%', height: '100%', display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0, overflow: 'hidden' }}>
-      <div style={{ background: '#f8f9fa', display: 'flex', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)', minHeight: 0, overflow: 'hidden' }}>
-        {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+      <div style={{ background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)', minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+        </div>
+        <div style={{ fontSize: '0.875rem', color: '#6c757d', flexShrink: 0, marginLeft: '1rem' }}>{lastUpdatedLabel} {formatLastUpdated(plan.last_update_iso, language)}</div>
       </div>
       <div style={{ minHeight: 0, minWidth: 0, position: 'relative', overflow: 'auto' }}>
         <div style={{ minHeight: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem 2rem', boxSizing: 'border-box' }}>
@@ -441,12 +475,12 @@ function SimpleLayoutAll({ weekplans }: { weekplans: Weekplan[]; language: 'en-G
         </div>
         {canPrev && (
           <button type="button" onClick={() => setIndex(i => Math.max(0, i - 1))} style={{ ...navBtnStyle, left: 8 }} aria-label="Previous">
-            ‹
+            <ChevronLeft />
           </button>
         )}
         {canNext && (
           <button type="button" onClick={() => setIndex(i => Math.min(weekplans.length - 1, i + 1))} style={{ ...navBtnStyle, right: 8 }} aria-label="Next">
-            ›
+            <ChevronRight />
           </button>
         )}
       </div>
@@ -454,7 +488,7 @@ function SimpleLayoutAll({ weekplans }: { weekplans: Weekplan[]; language: 'en-G
   )
 }
 
-function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }: { plans: Weekplan[]; view: 'plan1' | 'plan2'; language: 'en-GB' | 'nb-NO'; isPortrait: boolean; showCalendar?: boolean }) {
+function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar, navButtonSize = 48 }: { plans: Weekplan[]; view: 'plan1' | 'plan2'; language: 'en-GB' | 'nb-NO'; isPortrait: boolean; showCalendar?: boolean; navButtonSize?: number }) {
   const planKey = view === 'plan2' ? 'plan2' : 'plan1'
   const plan = plans.find(p => p.key === planKey)
   if (!plan) return null
@@ -466,12 +500,24 @@ function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }:
   const imgUrl = pages[pageIndex] || plan.img_url
   const canPrev = pageIndex > 0
   const canNext = pageIndex < pages.length - 1
+  const size = Math.max(24, Math.min(96, navButtonSize))
+  const iconSize = Math.round(size * 0.72)
   const navBtnStyle: React.CSSProperties = {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    width: 48, height: 48, borderRadius: '50%', border: '2px solid #dee2e6',
+    width: size, height: size, borderRadius: '50%', border: `${Math.max(1, Math.round(size / 24))}px solid #dee2e6`,
     background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '1.5rem', color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+    padding: 0, lineHeight: 0, color: '#495057', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   }
+  const ChevronLeft = () => (
+    <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  )
+  const ChevronRight = () => (
+    <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flexShrink: 0 }}>
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  )
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
@@ -498,11 +544,15 @@ function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }:
     return () => { cancelled = true; window.clearInterval(id) }
   }, [planKey, showCalendar])
 
+  const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
-      <div style={{ flexShrink: 0, background: '#f8f9fa', display: 'flex', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-        {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+      <div style={{ flexShrink: 0, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          {plan.enable_icon !== false && <span style={{ marginRight: '0.75rem', fontSize: '1.5rem' }}>{plan.icon}</span>}
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{plan.name}</h2>
+        </div>
+        <div style={{ fontSize: '0.875rem', color: '#6c757d', flexShrink: 0, marginLeft: '1rem' }}>{lastUpdatedLabel} {formatLastUpdated(plan.last_update_iso, language)}</div>
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative', overflow: 'auto' }}>
         <div style={{ minHeight: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '1rem 2rem', boxSizing: 'border-box' }}>
@@ -510,12 +560,12 @@ function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }:
         </div>
         {canPrev && (
           <button type="button" onClick={() => setPageIndex(i => Math.max(0, i - 1))} style={{ ...navBtnStyle, left: 8 }} aria-label="Previous page">
-            ‹
+            <ChevronLeft />
           </button>
         )}
         {canNext && (
           <button type="button" onClick={() => setPageIndex(i => Math.min(pages.length - 1, i + 1))} style={{ ...navBtnStyle, right: 8 }} aria-label="Next page">
-            ›
+            <ChevronRight />
           </button>
         )}
       </div>
@@ -587,7 +637,7 @@ function SimpleLayoutSingle({ plans, view, language, isPortrait, showCalendar }:
 }
 
 function PlanCard({ plan, language }: { plan: Weekplan; language: 'en-GB' | 'nb-NO' }) {
-  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
+  const lastUpdated = formatLastUpdated(plan.last_update_iso, language)
   const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
   return (
     <div style={{ flex: 1, background: 'white', borderRadius: 12, padding: '1.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
@@ -611,7 +661,7 @@ function SingleUserTwoPage({ plans, view, isPortrait, language, showCalendar }: 
   const planKey = view === 'plan2' ? 'plan2' : 'plan1'
   const plan = plans.find(p => p.key === planKey)
   if (!plan) return null
-  const lastUpdated = plan.last_update_iso ? new Date(plan.last_update_iso).toLocaleString(language, { hour12: false }) : '—'
+  const lastUpdated = formatLastUpdated(plan.last_update_iso, language)
   const lastUpdatedLabel = language === 'nb-NO' ? 'Sist oppdatert:' : 'Last updated:'
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState<boolean>(false)
