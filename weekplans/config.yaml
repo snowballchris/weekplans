@@ -1,6 +1,6 @@
 name: WeekPlans
 description: Digital weekly schedule display for home automation. Shows PDF schedules, calendars, and screensaver images. Optional MQTT integration for Home Assistant.
-version: "2026.02.28.1"
+version: "2026.03.09.1"
 slug: weekplans
 arch:
   - aarch64

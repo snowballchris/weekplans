@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.03.09.1
+
+- Multiple changes to improve functionality, read the full release notes here: https://github.com/snowballchris/weekplans/releases/tag/2026.03.09.1
+
 ## 2026.02.28b
 
 - Fix ingress: add ingress_port 80 and ingress_entry /admin so Open Web UI button works
